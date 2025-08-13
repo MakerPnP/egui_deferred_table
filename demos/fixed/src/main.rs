@@ -1,10 +1,8 @@
 extern crate core;
 
 use std::fmt::Display;
-use egui::{Ui, ViewportBuilder};
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource, TableValue};
+use egui::{ViewportBuilder};
+use egui_deferred_table::{DeferredTable, DeferredTableBuilder, TableValue};
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -15,7 +13,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "egui_deferred_table - Simple demo",
+        "egui_deferred_table - Fixed data demo",
         native_options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
@@ -65,7 +63,7 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Simple demo");
+                ui.label("Fixed data demo");
                 ui.checkbox(&mut self.inspection, "🔍 Inspection");
             });
         });
@@ -77,10 +75,10 @@ impl eframe::App for MyApp {
             egui::ScrollArea::both()
                 .show(ui, |ui| {
 
-                    let data_source = &mut self.data.as_mut_slice();
+                    let data_source = self.data.as_slice();
 
                     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-                        .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, &mut [RowType]>| {
+                        .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
 
                             builder.header(|header_builder| {
 
@@ -114,99 +112,4 @@ impl eframe::App for MyApp {
                 ctx.inspection_ui(ui);
             });
     }
-}
-
-struct MySource {
-    data: Vec<Vec<Value>>,
-}
-
-impl MySource {
-    pub fn new() -> Self {
-        let data = vec![
-            vec![
-                Value::Text("Message".to_string()),
-                Value::Text("Value 1".to_string()),
-                Value::Text("Value 2".to_string()),
-                Value::Text("Result".to_string()),
-            ],
-            vec![
-                Value::Text("Hello World".to_string()),
-                Value::Decimal(dec!(42.0)),
-                Value::Decimal(dec!(69.0)),
-                Value::Text("=B2+C2".to_string())
-            ],
-            vec![
-                Value::Text("Example data".to_string()),
-                Value::Decimal(dec!(6.0)),
-                Value::Decimal(dec!(9.0)),
-                Value::Text("=B3+C3".to_string())
-            ],
-
-        ];
-
-        Self {
-            data
-        }
-    }
-
-    fn calculate_value(&self, _formula: &Formula) -> FormulaResult {
-        FormulaResult::Error("#NOT_IMPLEMENTED".to_string())
-    }
-
-    fn build_value(&self, value: Value) -> CellValue {
-        match value {
-            Value::Text(text) => {
-                if text.starts_with("=") {
-                    let formula = Formula::new(text);
-                    let result = self.calculate_value(&formula);
-
-                    CellValue::Calculated(formula, result)
-                } else {
-                    CellValue::Value(Value::Text(text))
-                }
-            }
-            value @ Value::Decimal(_) => CellValue::Value(value)
-        }
-    }
-
-    pub fn render_error(&self, ui: &mut Ui, message: String) {
-        ui.colored_label(egui::Color32::RED, &message);
-    }
-
-    pub fn render_value(&self, ui: &mut Ui, value: Value) {
-        match value {
-            Value::Text(text) => {
-                ui.label(text);
-            }
-            Value::Decimal(decimal) => {
-                ui.label(decimal.to_string());
-            }
-        }
-    }
-}
-
-enum CellValue {
-    Calculated(Formula, FormulaResult),
-    Value(Value),
-}
-
-#[derive(Clone)]
-enum Value {
-    Text(String),
-    Decimal(Decimal),
-}
-
-struct Formula {
-    formula: String,
-}
-
-impl Formula {
-    fn new(formula: String) -> Self {
-        Self { formula }
-    }
-}
-
-enum FormulaResult {
-    Value(Value),
-    Error(String),
 }

@@ -20,7 +20,7 @@ impl<DataSource> DeferredTable<DataSource> {
     pub fn show(
         &self,
         ui: &mut Ui,
-        data_source: &mut DataSource,
+        data_source: &DataSource,
         build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
     ) -> (Response, Vec<Action>)
     where
@@ -116,7 +116,7 @@ pub struct DeferredTableBuilder<'a, DataSource> {
     state: &'a mut DeferredTableState,
     source_state: &'a mut SourceState,
 
-    data_source: &'a mut DataSource,
+    data_source: &'a DataSource,
 }
 
 impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
@@ -139,7 +139,7 @@ impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
     fn new(
         state: &'a mut DeferredTableState,
         source_state: &'a mut SourceState,
-        data_source: &'a mut DataSource,
+        data_source: &'a DataSource,
     ) -> Self
     where
         DataSource: DeferredTableDataSource,
@@ -156,11 +156,7 @@ impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
         }
     }
 
-    pub fn data_source(&mut self) -> &DataSource {
-        self.data_source
-    }
-
-    pub fn data_source_mut(&mut self) -> &mut DataSource {
+    pub fn source(&mut self) -> &DataSource {
         self.data_source
     }
 }
@@ -175,7 +171,7 @@ pub struct HeaderBuilder<'a, DataSource> {
     table: &'a mut Table,
     state: &'a mut DeferredTableState,
     source_state: &'a mut SourceState,
-    data_source: &'a mut DataSource,
+    data_source: &'a DataSource,
 }
 
 impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
@@ -183,7 +179,7 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
         table: &'a mut Table,
         state: &'a mut DeferredTableState,
         source_state: &'a mut SourceState,
-        data_source: &'a mut DataSource,
+        data_source: &'a DataSource,
     ) -> Self {
         Self {
             table,
@@ -193,7 +189,7 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
         }
     }
 
-    pub fn source(&mut self) -> &mut DataSource {
+    pub fn source(&mut self) -> &DataSource {
         self.data_source
     }
 
@@ -215,7 +211,7 @@ impl TableValue for String {}
 impl TableValue for usize {}
 
 // convert into a macro for various tuple sizes
-impl<A: TableValue, B: TableValue, C: TableValue, D: TableValue> DeferredTableDataSource for &mut [(A,B,C,D)] {
+impl<A: TableValue, B: TableValue, C: TableValue, D: TableValue> DeferredTableDataSource for &[(A,B,C,D)] {
     fn get_dimensions(&self) -> (usize, usize) {
         (self.len(), 4)
     }
