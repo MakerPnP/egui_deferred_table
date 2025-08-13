@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::marker::PhantomData;
 use egui::{Id, Response, Ui};
 use indexmap::IndexMap;
@@ -15,18 +16,18 @@ impl<DataSource> DeferredTable<DataSource> {
             phantom_data: PhantomData,
         }
     }
-    
-    pub fn show<V>(
-        &self, 
+
+    pub fn show(
+        &self,
         ui: &mut Ui,
         data_source: &mut DataSource,
-        build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource, V>),
-    ) -> (Response, Vec<Action>) 
+        build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
+    ) -> (Response, Vec<Action>)
     where
-        DataSource: DeferredTableDataSource<V>,
+        DataSource: DeferredTableDataSource,
     {
         let mut actions = vec![];
-    
+
         // TODO load from egui memory
         let mut state = DeferredTableState::default();
 
@@ -40,7 +41,7 @@ impl<DataSource> DeferredTable<DataSource> {
         };
 
         let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
-        
+
         build_table_view(&mut builder);
 
         //
@@ -50,13 +51,13 @@ impl<DataSource> DeferredTable<DataSource> {
             let column_count = builder.table.columns.len();
             for column_number in 0..=column_count {
                 ui.vertical(|ui| {
-                    
-                    let mut column_index = if column_number == 0 { None } else { Some(column_number - 1)};
-                    
+
+                    let column_index = if column_number == 0 { None } else { Some(column_number - 1)};
+
                     //
                     // heading
                     //
-                    
+
                     if let Some(column_index) = column_index {
                         let column = builder.table.columns.get(&column_index);
                         if let Some(column) = column {
@@ -80,10 +81,9 @@ impl<DataSource> DeferredTable<DataSource> {
             }
         });
         
-        
         // TODO save state to egui memory
 
-        (ui.response(), actions) 
+        (ui.response(), actions)
     }
 }
 
@@ -101,66 +101,65 @@ struct DeferredTableState {
     // TODO cell selection
 }
 
-pub trait DeferredTableDataSource<V> {
+pub trait DeferredTableDataSource {
     fn get_dimensions(&self) -> (usize, usize);
-    fn get_cell_value(&self, row: usize, col: usize) -> Option<V>;
-    fn column_name(&self, index: usize) -> String;
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize);
+
+    fn column_name(&self, index: usize) -> String {
+        unimplemented!()
+    }
 }
 
-pub struct DeferredTableBuilder<'a, DataSource, V> {
+pub struct DeferredTableBuilder<'a, DataSource> {
     table: Table,
-    
+
     state: &'a mut DeferredTableState,
     source_state: &'a mut SourceState,
-    
+
     data_source: &'a mut DataSource,
-    
-    phantom_data: PhantomData<V>,
 }
 
-impl<'a, DataSource, V> DeferredTableBuilder<'a, DataSource, V> {
-    pub fn header(&mut self, builder_header_view: fn(&'_ mut HeaderBuilder<'_, DataSource, V>)) {
-        
+impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
+    pub fn header(&mut self, builder_header_view: fn(&'_ mut HeaderBuilder<'_, DataSource>)) {
+
         let mut header_builder = HeaderBuilder::new(&mut self.table, self.state, &mut self.source_state, self.data_source);
-        
+
         builder_header_view(&mut header_builder);
-        
+
     }
 }
 
 struct Table {
     columns: IndexMap<usize, String>,
-    
+
     // TODO column groups here..
 }
 
-impl<'a, DataSource, V> DeferredTableBuilder<'a, DataSource, V> {
+impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
     fn new(
-        state: &'a mut DeferredTableState, 
+        state: &'a mut DeferredTableState,
         source_state: &'a mut SourceState,
-        data_source: &'a mut DataSource, 
+        data_source: &'a mut DataSource,
     ) -> Self
     where
-        DataSource: DeferredTableDataSource<V>,
+        DataSource: DeferredTableDataSource,
     {
         let table = Table {
             columns: IndexMap::new(),
         };
-        
+
         Self {
             table,
             state,
             source_state,
             data_source,
-            phantom_data: Default::default(),
         }
     }
-    
+
     pub fn data_source(&mut self) -> &DataSource {
         self.data_source
     }
-    
+
     pub fn data_source_mut(&mut self) -> &mut DataSource {
         self.data_source
     }
@@ -172,40 +171,69 @@ struct SourceState {
     dimensions: (usize, usize),
 }
 
-pub struct HeaderBuilder<'a, DataSource, V> {
+pub struct HeaderBuilder<'a, DataSource> {
     table: &'a mut Table,
     state: &'a mut DeferredTableState,
     source_state: &'a mut SourceState,
     data_source: &'a mut DataSource,
-    
-    phantom_data: PhantomData<V>,
 }
 
-impl<'a, DataSource, V> HeaderBuilder<'a, DataSource, V> {
+impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
     fn new(
         table: &'a mut Table,
-        state: &'a mut DeferredTableState, 
+        state: &'a mut DeferredTableState,
         source_state: &'a mut SourceState,
-        data_source: &'a mut DataSource, 
+        data_source: &'a mut DataSource,
     ) -> Self {
         Self {
             table,
             state,
             source_state,
             data_source,
-            phantom_data: Default::default(),
         }
     }
 
     pub fn source(&mut self) -> &mut DataSource {
         self.data_source
     }
-    
+
     pub fn current_dimensions(&self) -> (usize, usize) {
         self.source_state.dimensions
     }
 
     pub fn column(&mut self, index: usize, name: String) {
         self.table.columns.insert(index, name);
+    }
+}
+
+
+pub trait TableValue: Sized + Display {}
+
+// TODO add more types
+impl TableValue for f32 {}
+impl TableValue for String {}
+impl TableValue for usize {}
+
+// convert into a macro for various tuple sizes
+impl<A: TableValue, B: TableValue, C: TableValue, D: TableValue> DeferredTableDataSource for &mut [(A,B,C,D)] {
+    fn get_dimensions(&self) -> (usize, usize) {
+        (self.len(), 4)
+    }
+
+    fn column_name(&self, index: usize) -> String {
+        "N/A".to_string()
+    }
+
+    fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
+        let row = self.get(row).unwrap();
+        let value = match col {
+            0 => row.0.to_string(),
+            1 => row.1.to_string(),
+            2 => row.2.to_string(),
+            3 => row.3.to_string(),
+            _ => unreachable!(),
+        };
+
+        ui.label(value);
     }
 }

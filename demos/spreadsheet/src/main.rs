@@ -1,10 +1,10 @@
 extern crate core;
 
-use std::fmt::Display;
+use std::sync::{Arc, Mutex};
 use egui::{Ui, ViewportBuilder};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource, TableValue};
+use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource};
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -15,48 +15,23 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "egui_deferred_table - Simple demo",
+        "egui_deferred_table - Spreadsheet demo",
         native_options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
 }
 
-#[derive(Debug)]
-enum Kind {
-    Human,
-    Alien,
-    Mutant,
-    Robot,
-}
-
-impl Display for Kind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", format!("{:?}", self).to_lowercase())
-    }
-}
-
-type RowType = (String, Kind, usize, f32);
-
-impl TableValue for Kind {}
-
 struct MyApp {
     inspection: bool,
-
-    data: Vec<RowType>,
+    
+    data: Arc<Mutex<MySource>>,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             inspection: false,
-            data: vec![
-                ("Fry".to_string(), Kind::Human, 30, 69.0),
-                ("Leela".to_string(), Kind::Mutant, 32, 42.0),
-                ("Bender".to_string(), Kind::Robot, 28, 42.0),
-                ("Zoidberg".to_string(), Kind::Alien, 40, 42.0),
-                ("Nibbler".to_string(), Kind::Alien, 69, 42.0),
-                ("Farnsworth".to_string(), Kind::Human, 90, 42.0),
-            ],
+            data: Arc::new(Mutex::new(MySource::new())),
         }
     }
 }
@@ -65,46 +40,50 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Simple demo");
+                ui.label("Spreadsheet demo");
                 ui.checkbox(&mut self.inspection, "🔍 Inspection");
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-
+            
             ui.label("content above");
             ui.separator();
             egui::ScrollArea::both()
                 .show(ui, |ui| {
 
-                    let data_source = &mut self.data.as_mut_slice();
-
+                    let mut data_source = self.data.lock().unwrap();
+                    
                     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-                        .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, &mut [RowType]>| {
-
+                        .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<MySource>| {
+                            
                             builder.header(|header_builder| {
+                                
+                                let (_row_count, column_count) = header_builder.current_dimensions();
 
-                                header_builder
-                                    .column(0, "Name".to_string());
-                                header_builder
-                                    .column(1, "Kind".to_string());
-                                header_builder
-                                    .column(2, "usize".to_string());
-                                header_builder
-                                    .column(3, "f32".to_string());
+                                for index in 0..column_count {
+                                    let source = header_builder.source();
+                                    let column_name = source.column_name(index);
+                                    header_builder
+                                        .column(index, column_name);
+                                }
+
+                                // header_builder.create_group("Group 1", Some([0,1,2]));
+                                // header_builder.create_group("Remainder", None);
                             })
                         });
-
+                    
                     for action in actions {
                         println!("{:?}", action);
                     }
 
                 });
-
+            
             ui.separator();
             ui.label("content below");
-
+            
         });
+
 
         // Inspection window
         egui::Window::new("🔍 Inspection")
@@ -124,9 +103,9 @@ impl MySource {
     pub fn new() -> Self {
         let data = vec![
             vec![
-                Value::Text("Message".to_string()),
-                Value::Text("Value 1".to_string()),
-                Value::Text("Value 2".to_string()),
+                Value::Text("Message".to_string()), 
+                Value::Text("Value 1".to_string()), 
+                Value::Text("Value 2".to_string()), 
                 Value::Text("Result".to_string()),
             ],
             vec![
@@ -141,7 +120,7 @@ impl MySource {
                 Value::Decimal(dec!(9.0)),
                 Value::Text("=B3+C3".to_string())
             ],
-
+            
         ];
 
         Self {
@@ -172,14 +151,77 @@ impl MySource {
     pub fn render_error(&self, ui: &mut Ui, message: String) {
         ui.colored_label(egui::Color32::RED, &message);
     }
-
+    
     pub fn render_value(&self, ui: &mut Ui, value: Value) {
         match value {
             Value::Text(text) => {
-                ui.label(text);
+                ui.label(text);   
             }
             Value::Decimal(decimal) => {
                 ui.label(decimal.to_string());
+            }
+        }
+    }
+
+    fn get_cell_value(&self, row: usize, col: usize) -> Option<CellValue> {
+        let row_values = &self.data[row];
+
+        let cell_value = row_values.get(col)
+            .map(|value| self.build_value(value.clone()));
+
+        cell_value
+    }
+}
+
+impl DeferredTableDataSource for MySource {
+    fn get_dimensions(&self) -> (usize, usize) {
+        let rows  =self.data.len();
+        let columns = self.data.iter().fold(0, |acc, row| {
+            row.len().max(acc)
+        });
+
+        (rows, columns)
+    }
+
+    // given '0' the result is 'A', '25' is 'Z', given '26' the result is 'AA', given '27' the result is 'AB' and so on.
+    fn column_name(&self, index: usize) -> String {
+        let mut result = String::new();
+        let mut n = index + 1; // Add 1 to avoid special case for index 0
+
+        while n > 0 {
+            // Get the current character (remainder when divided by 26)
+            let remainder = ((n - 1) % 26) as u8;
+            // Convert to corresponding ASCII character (A-Z)
+            let c = (b'A' + remainder) as char;
+            // Prepend to result (we build the string from right to left)
+            result.insert(0, c);
+            // Integer division to get the next "digit"
+            n = (n - 1) / 26;
+        }
+
+        result
+    }
+
+    fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
+        let possible_value = self.get_cell_value(row, col);
+        match possible_value {
+            None => {}
+            Some(value) => {
+                match value {
+                    CellValue::Calculated(formula, result) => {
+                        match result {
+                            FormulaResult::Value(value) => {
+                                self.render_value(ui, value);
+                            }
+                            FormulaResult::Error(message) => {
+                                self.render_error(ui, message);
+                            }
+                        }
+                    }
+                    CellValue::Value(value) => {
+                        self.render_value(ui, value);   
+                    }
+                }
             }
         }
     }
