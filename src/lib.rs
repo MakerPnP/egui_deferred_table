@@ -198,30 +198,51 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
     }
 }
 
+// define a macro that handles the implementation for a specific tuple size
+macro_rules! impl_tuple_for_size {
+    // Pattern: tuple type names, tuple size, match arms for indexing
+    (($($T:ident),*), $size:expr, $( ($idx:expr, $field:tt) ),* ) => {
+        impl<$($T: Display),*> DeferredTableDataSource for &[($($T),*)] {
+            fn get_dimensions(&self) -> (usize, usize) {
+                (self.len(), $size)
+            }
 
-pub trait TableValue: Sized + Display {}
-
-// TODO add more types
-impl TableValue for f32 {}
-impl TableValue for String {}
-impl TableValue for usize {}
-
-// convert into a macro for various tuple sizes
-impl<A: TableValue, B: TableValue, C: TableValue, D: TableValue> DeferredTableDataSource for &[(A,B,C,D)] {
-    fn get_dimensions(&self) -> (usize, usize) {
-        (self.len(), 4)
-    }
-
-    fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
-        let row = self.get(row).unwrap();
-        let value = match col {
-            0 => row.0.to_string(),
-            1 => row.1.to_string(),
-            2 => row.2.to_string(),
-            3 => row.3.to_string(),
-            _ => unreachable!(),
-        };
-
-        ui.label(value);
-    }
+            fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
+                if let Some(row_data) = self.get(row) {
+                    match col {
+                        $( $idx => ui.label(row_data.$field.to_string()), )*
+                        _ => unreachable!(),
+                    };
+                }
+            }
+        }
+    };
 }
+
+// use a front-end macro that calls the implementation macro with the right parameters
+macro_rules! impl_deferred_table_for_tuple {
+    // 2-tuple
+    ((A, B), 2) => {
+        impl_tuple_for_size!((A, B), 2, (0, 0), (1, 1));
+    };
+    
+    // 3-tuple
+    ((A, B, C), 3) => {
+        impl_tuple_for_size!((A, B, C), 3, (0, 0), (1, 1), (2, 2));
+    };
+    
+    // 4-tuple
+    ((A, B, C, D), 4) => {
+        impl_tuple_for_size!((A, B, C, D), 4, (0, 0), (1, 1), (2, 2), (3, 3));
+    };
+    
+    // 5-tuple
+    ((A, B, C, D, E), 5) => {
+        impl_tuple_for_size!((A, B, C, D, E), 5, (0, 0), (1, 1), (2, 2), (3, 3), (4, 4));
+    };
+}
+
+impl_deferred_table_for_tuple!((A, B), 2);
+impl_deferred_table_for_tuple!((A, B, C), 3);
+impl_deferred_table_for_tuple!((A, B, C, D), 4);
+impl_deferred_table_for_tuple!((A, B, C, D, E), 5);

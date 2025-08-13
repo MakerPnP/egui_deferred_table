@@ -2,7 +2,7 @@ extern crate core;
 
 use std::fmt::Display;
 use egui::{ViewportBuilder};
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, TableValue};
+use egui_deferred_table::{DeferredTable, DeferredTableBuilder};
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -34,8 +34,6 @@ impl Display for Kind {
 }
 
 type RowType = (String, Kind, usize, f32);
-
-impl TableValue for Kind {}
 
 struct MyApp {
     inspection: bool,
