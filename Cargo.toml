@@ -1,0 +1,27 @@
+[package]
+name = "egui_deferred_table"
+version = "0.1.0"
+edition = "2024"
+documentation = "https://docs.rs/egui_deferred_table"
+repository = "https://github.com/MakerPnP/egui_deferred_table"
+homepage = "https://github.com/MakerPnP/egui_deferred_table"
+license = "MIT OR Apache-2.0"
+authors = [
+    "Dominic Clifton <me@dominicclifton.name>"
+]
+description = "An egui table, where the number of rows/columns is deferred"
+readme = "README.md"
+keywords = ["egui", "gui", "widget", "table", "data"]
+categories = ["gui"]
+include = [
+    "assets/**/*",
+    "examples/**/*",
+    "src/**/*",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+]
+
+[dependencies]
+egui = { version = "0.32.0" }
+indexmap = "2.10.0"

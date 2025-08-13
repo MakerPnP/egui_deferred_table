@@ -1,0 +1,19 @@
+[package]
+name = "simple"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+egui_deferred_table = { path = "../.." }
+
+egui = { version = "0.32.0" }
+eframe = { version = "0.32.0"}
+
+# data types
+rust_decimal = "1.37"
+rust_decimal_macros = "1.37"
+
+# logging
+env_logger = "0.11.8"
+
+
