@@ -62,8 +62,7 @@ impl eframe::App for MyApp {
                                 let (_row_count, column_count) = header_builder.current_dimensions();
 
                                 for index in 0..column_count {
-                                    let source = header_builder.source();
-                                    let column_name = source.column_name(index);
+                                    let column_name = MySource::make_column_name(index);
                                     header_builder
                                         .column(index, column_name);
                                 }
@@ -171,20 +170,9 @@ impl MySource {
 
         cell_value
     }
-}
-
-impl DeferredTableDataSource for MySource {
-    fn get_dimensions(&self) -> (usize, usize) {
-        let rows  =self.data.len();
-        let columns = self.data.iter().fold(0, |acc, row| {
-            row.len().max(acc)
-        });
-
-        (rows, columns)
-    }
-
+    
     // given '0' the result is 'A', '25' is 'Z', given '26' the result is 'AA', given '27' the result is 'AB' and so on.
-    fn column_name(&self, index: usize) -> String {
+    fn make_column_name(index: usize) -> String {
         let mut result = String::new();
         let mut n = index + 1; // Add 1 to avoid special case for index 0
 
@@ -200,6 +188,17 @@ impl DeferredTableDataSource for MySource {
         }
 
         result
+    }
+}
+
+impl DeferredTableDataSource for MySource {
+    fn get_dimensions(&self) -> (usize, usize) {
+        let rows  =self.data.len();
+        let columns = self.data.iter().fold(0, |acc, row| {
+            row.len().max(acc)
+        });
+
+        (rows, columns)
     }
 
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {

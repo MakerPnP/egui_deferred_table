@@ -80,7 +80,7 @@ impl<DataSource> DeferredTable<DataSource> {
                 });
             }
         });
-        
+
         // TODO save state to egui memory
 
         (ui.response(), actions)
@@ -104,10 +104,6 @@ struct DeferredTableState {
 pub trait DeferredTableDataSource {
     fn get_dimensions(&self) -> (usize, usize);
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize);
-
-    fn column_name(&self, index: usize) -> String {
-        unimplemented!()
-    }
 }
 
 pub struct DeferredTableBuilder<'a, DataSource> {
@@ -214,10 +210,6 @@ impl TableValue for usize {}
 impl<A: TableValue, B: TableValue, C: TableValue, D: TableValue> DeferredTableDataSource for &[(A,B,C,D)] {
     fn get_dimensions(&self) -> (usize, usize) {
         (self.len(), 4)
-    }
-
-    fn column_name(&self, index: usize) -> String {
-        "N/A".to_string()
     }
 
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
