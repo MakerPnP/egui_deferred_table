@@ -121,7 +121,7 @@ impl<DataSource> DeferredTable<DataSource> {
                     let response = ui.allocate_rect(rect, Sense::click());
 
                     if cell_index.is_some() {
-                        let bg_color = if response.hovered() {
+                        let bg_color = if response.contains_pointer() {
                             ui.style().visuals.widgets.hovered.bg_fill
                     } else {
                             ui.style().visuals.widgets.inactive.bg_fill
