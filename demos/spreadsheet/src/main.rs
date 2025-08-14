@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use egui::{Ui, ViewportBuilder};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource, TableDimensions};
+use egui_deferred_table::{CellIndex, DeferredTable, DeferredTableBuilder, DeferredTableDataSource, TableDimensions};
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -162,10 +162,10 @@ impl MySource {
         }
     }
 
-    fn get_cell_value(&self, row: usize, col: usize) -> Option<CellValue> {
-        let row_values = &self.data[row];
+    fn get_cell_value(&self, cell_index: CellIndex) -> Option<CellValue> {
+        let row_values = &self.data[cell_index.row];
 
-        let cell_value = row_values.get(col)
+        let cell_value = row_values.get(cell_index.column)
             .map(|value| self.build_value(value.clone()));
 
         cell_value
@@ -205,8 +205,8 @@ impl DeferredTableDataSource for MySource {
         
     }
 
-    fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
-        let possible_value = self.get_cell_value(row, col);
+    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
+        let possible_value = self.get_cell_value(cell_index);
         match possible_value {
             None => {}
             Some(value) => {
