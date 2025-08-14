@@ -1,20 +1,39 @@
 use std::fmt::Display;
 use std::marker::PhantomData;
-use egui::{Id, Response, Ui};
+use egui::{Align, Color32, CornerRadius, Id, Layout, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
+    parameters: DeferredTableParameters, 
     phantom_data: PhantomData<DataSource>
 }
+
+#[derive(Default)]
+struct DeferredTableParameters {
+    default_cell_size: Option<Vec2>,
+    default_origin: Option<CellIndex>,
+}
+
 
 impl<DataSource> DeferredTable<DataSource> {
 
     pub fn new(id: Id) -> Self {
         Self {
             id,
+            parameters: DeferredTableParameters::default(),
             phantom_data: PhantomData,
         }
+    }
+
+    pub fn default_cell_size(mut self, size: Vec2) -> Self {
+        self.parameters.default_cell_size = Some(size);
+        self
+    }
+    
+    pub fn default_origin(mut self, origin: CellIndex) -> Self {
+        self.parameters.default_origin = Some(origin);
+        self
     }
 
     pub fn show(
@@ -28,8 +47,21 @@ impl<DataSource> DeferredTable<DataSource> {
     {
         let mut actions = vec![];
 
+        let style = ui.style();
+        
         // TODO load from egui memory
-        let mut state = DeferredTableState::default();
+        let mut state = DeferredTableState {
+            cell_size: self.parameters.default_cell_size.unwrap_or((
+                style.spacing.interact_size.x + (style.spacing.item_spacing.x * 2.0),
+                style.spacing.interact_size.y + (style.spacing.item_spacing.y * 2.0),
+            ).into()),
+            
+            cell_origin: self.parameters.default_origin.unwrap_or(CellIndex::default()),
+            
+            // TODO use a constant for this
+            min_size: (400.0, 200.0).into(), 
+            ..DeferredTableState::default()
+        };
 
         // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
         // each time it's called.
@@ -40,6 +72,9 @@ impl<DataSource> DeferredTable<DataSource> {
             dimensions,
         };
 
+        let max_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
+        let cell_size = state.cell_size.clone();
+
         let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
 
         build_table_view(&mut builder);
@@ -47,37 +82,78 @@ impl<DataSource> DeferredTable<DataSource> {
         //
         // display the table
         //
-        ui.horizontal(|ui|{
+
+        //ui.painter().debug_rect(max_rect, Color32::RED, "max_rect");
+
+        ui.scope_builder(UiBuilder::new().max_rect(max_rect), |ui|{
+
+            let mut start_pos = ui.cursor().min;
+            
+            //
+            // headers
+            //
             let column_count = builder.table.columns.len();
-            for column_number in 0..=column_count {
-                ui.vertical(|ui| {
+            for column_index in 0..=column_count {
+
+                let x = start_pos.x + (column_index as f32 * cell_size.x);
+                let y = start_pos.y + (0 as f32 * cell_size.y);
+
+                let rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+                let response = ui.allocate_rect(rect, Sense::click());
+
+                ui.painter()
+                    .rect_stroke(rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+
+                let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(rect));
+                cell_ui.set_clip_rect(rect);
+                cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                
+                cell_ui.label(column_index.to_string());
+            }
+            
+            start_pos.y += cell_size.y;
+            
+            //
+            // rows
+            //
+            for row_index in 0..source_state.dimensions.row_count {
+                
+                let row_number = row_index + 1;
+
+                let y = start_pos.y + (row_index as f32 * cell_size.y);
+
+                // TODO handle individual column sizes
+                for column_number in 0..=source_state.dimensions.column_count {
 
                     let column_index = if column_number == 0 { None } else { Some(column_number - 1)};
 
-                    //
-                    // heading
-                    //
+                    let x = start_pos.x + (column_number as f32 * cell_size.x);
 
-                    if let Some(column_index) = column_index {
-                        let column = builder.table.columns.get(&column_index);
-                        if let Some(column) = column {
-                            ui.label(column);
-                        }
+                    let rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+                    let response = ui.allocate_rect(rect, Sense::click());
+
+                    if column_index.is_some() {
+                        let bg_color = if response.hovered() {
+                            ui.style().visuals.widgets.hovered.bg_fill
                     } else {
-                        ui.label("!");
+                            ui.style().visuals.widgets.inactive.bg_fill
+                        };
+                        ui.painter().rect_filled(rect, 0.0, bg_color);                    
                     }
 
-                    //
-                    // values
-                    //
-                    for row_index in 0..source_state.dimensions.0 {
+                    ui.painter()
+                        .rect_stroke(rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+
+                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(rect));
+                    cell_ui.set_clip_rect(rect);
+                    cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+
                         if let Some(column_index) = column_index {
-                            data_source.render_cell(ui, row_index, column_index);
+                        data_source.render_cell(&mut cell_ui, row_index, column_index);
                         } else {
-                            ui.label((row_index + 1).to_string());
+                        cell_ui.label(row_number.to_string());
                         }
                     }
-                });
             }
         });
 
@@ -93,16 +169,51 @@ pub enum Action {
     // SelectionChanged, etc.
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CellIndex {
+    pub row: usize,
+    pub column: usize,
+}
+
+impl From<(usize, usize)> for CellIndex {
+    // column then row ordering in tuple to align with x/y so it's easier to remember
+    fn from(value: (usize, usize)) -> Self {
+        Self {
+            column: value.0,
+            row: value.1,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TableDimensions {
+    pub row_count: usize,
+    pub column_count: usize,
+}
+
+impl From<(usize, usize)> for TableDimensions {
+    // column then row ordering in tuple to align with x/y so it's easier to remember
+    fn from(value: (usize, usize)) -> Self {
+        Self {
+            column_count: value.0,
+            row_count: value.1,
+        }
+    }
+}
+
+
 #[derive(Default)]
 struct DeferredTableState {
-    // TODO column widths
+    min_size: Vec2,
+    cell_size: Vec2,
+    cell_origin: CellIndex,
     // TODO column ordering
     // TODO column visibility
     // TODO cell selection
 }
 
 pub trait DeferredTableDataSource {
-    fn get_dimensions(&self) -> (usize, usize);
+    fn get_dimensions(&self) -> TableDimensions;
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize);
 }
 
@@ -160,7 +271,7 @@ impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
 #[derive(Debug)]
 struct SourceState {
     /// (rows, columns) aka (x,y)
-    dimensions: (usize, usize),
+    dimensions: TableDimensions,
 }
 
 pub struct HeaderBuilder<'a, DataSource> {
@@ -189,7 +300,7 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
         self.data_source
     }
 
-    pub fn current_dimensions(&self) -> (usize, usize) {
+    pub fn current_dimensions(&self) -> TableDimensions {
         self.source_state.dimensions
     }
 
@@ -203,8 +314,11 @@ macro_rules! impl_tuple_for_size {
     // Pattern: tuple type names, tuple size, match arms for indexing
     (($($T:ident),*), $size:expr, $( ($idx:expr, $field:tt) ),* ) => {
         impl<$($T: Display),*> DeferredTableDataSource for &[($($T),*)] {
-            fn get_dimensions(&self) -> (usize, usize) {
-                (self.len(), $size)
+            fn get_dimensions(&self) -> TableDimensions {
+                TableDimensions {
+                    row_count: self.len(),
+                    column_count: $size,
+                }
             }
 
             fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {

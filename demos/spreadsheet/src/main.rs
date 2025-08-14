@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use egui::{Ui, ViewportBuilder};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource};
+use egui_deferred_table::{DeferredTable, DeferredTableBuilder, DeferredTableDataSource, TableDimensions};
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -59,7 +59,7 @@ impl eframe::App for MyApp {
                             
                             builder.header(|header_builder| {
                                 
-                                let (_row_count, column_count) = header_builder.current_dimensions();
+                                let TableDimensions { row_count: _, column_count } = header_builder.current_dimensions();
 
                                 for index in 0..column_count {
                                     let column_name = MySource::make_column_name(index);
@@ -192,13 +192,17 @@ impl MySource {
 }
 
 impl DeferredTableDataSource for MySource {
-    fn get_dimensions(&self) -> (usize, usize) {
+    fn get_dimensions(&self) -> TableDimensions {
         let rows  =self.data.len();
         let columns = self.data.iter().fold(0, |acc, row| {
             row.len().max(acc)
         });
 
-        (rows, columns)
+        TableDimensions {
+            row_count: rows,
+            column_count: columns
+        }
+        
     }
 
     fn render_cell(&self, ui: &mut Ui, row: usize, col: usize) {
