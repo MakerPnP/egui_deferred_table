@@ -117,8 +117,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
                     let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
 
-                    let rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
-                    let response = ui.allocate_rect(rect, Sense::click());
+                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+                    let response = ui.allocate_rect(cell_rect, Sense::click());
 
                     if cell_index.is_some() {
                         let bg_color = if response.contains_pointer() {
@@ -126,14 +126,14 @@ impl<DataSource> DeferredTable<DataSource> {
                     } else {
                             ui.style().visuals.widgets.inactive.bg_fill
                         };
-                        ui.painter().rect_filled(rect, 0.0, bg_color);
+                        ui.painter().rect_filled(cell_rect, 0.0, bg_color);
                     }
 
                     ui.painter()
-                        .rect_stroke(rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
 
-                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(rect));
-                    cell_ui.set_clip_rect(rect);
+                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                    cell_ui.set_clip_rect(cell_rect);
                     cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                     if let Some(cell_index) = cell_index {
