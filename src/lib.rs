@@ -43,7 +43,7 @@ impl<DataSource> DeferredTable<DataSource> {
         build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
     ) -> (Response, Vec<Action>)
     where
-        DataSource: DeferredTableDataSource,
+        DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
         let mut actions = vec![];
 
@@ -72,83 +72,121 @@ impl<DataSource> DeferredTable<DataSource> {
             dimensions,
         };
 
-        let max_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
-        let cell_size = state.cell_size.clone();
-        let cell_origin = state.cell_origin.clone();
-        // uncomment to test offset
-        //let cell_origin = CellIndex::from((2,3));
+        let parent_max_rect = ui.max_rect();
+        let parent_clip_rect = ui.clip_rect();
+        if false {
+            ui.painter().debug_rect(parent_max_rect, Color32::GREEN, "pmr");
+            ui.painter().debug_rect(parent_clip_rect, Color32::RED, "pcr");
+        }
+        
+        let outer_min_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
+        let outer_max_rect = outer_min_rect.union(parent_max_rect);
 
-        let visible_rows = source_state.dimensions.row_count - cell_origin.row;
-        let visible_columns = source_state.dimensions.column_count - cell_origin.column;
-
-        let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
-
-        build_table_view(&mut builder);
-
-        //
-        // display the table
-        //
-
-        //ui.painter().debug_rect(max_rect, Color32::RED, "max_rect");
-
-        ui.scope_builder(UiBuilder::new().max_rect(max_rect), |ui|{
-
-            let mut start_pos = ui.cursor().min;
-
-            for grid_row_index in 0..=visible_rows {
-
-                let row_number = grid_row_index + cell_origin.row;
-
-                let y = start_pos.y + (grid_row_index as f32 * cell_size.y);
-
-                // TODO handle individual column sizes
-                for grid_column_index in 0..=visible_columns {
-
-                    let column_number = grid_column_index + cell_origin.column;
-
-                    let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
-                        Some(CellIndex {
-                            row: cell_origin.row + (grid_row_index - 1),
-                            column: cell_origin.column + (grid_column_index - 1),
-                        })
-                    } else {
-                        None
-                    };
-
-                    let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
-
-                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
-                    let response = ui.allocate_rect(cell_rect, Sense::click());
-
-                    if cell_index.is_some() {
-                        let bg_color = if response.contains_pointer() {
-                            ui.style().visuals.widgets.hovered.bg_fill
-                    } else {
-                            ui.style().visuals.widgets.inactive.bg_fill
-                        };
-                        ui.painter().rect_filled(cell_rect, 0.0, bg_color);
-                    }
-
-                    ui.painter()
-                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
-
-                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
-                    cell_ui.set_clip_rect(cell_rect);
-                    cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-
-                    if let Some(cell_index) = cell_index {
-                        data_source.render_cell(&mut cell_ui, cell_index);
-                    } else {
-                        if grid_row_index == 0 && grid_column_index == 0 {
-                            cell_ui.label("!");
-                        } else if grid_row_index == 0 {
-                            cell_ui.label(column_number.to_string());
+        //println!("frame");
+        ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
+            
+            let inner_clip_rect = ui.clip_rect();
+            let inner_max_rect = ui.max_rect();
+            
+            let cell_size = state.cell_size.clone();
+            let cell_origin = state.cell_origin.clone();
+            // uncomment to test offset
+            //let cell_origin = CellIndex::from((2,3));
+    
+            let visible_rows = source_state.dimensions.row_count - cell_origin.row;
+            let visible_columns = source_state.dimensions.column_count - cell_origin.column;
+    
+            let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
+    
+            build_table_view(&mut builder);
+    
+            //
+            // display the table
+            //
+    
+            //ui.painter().debug_rect(inner_max_rect, Color32::CYAN, "imr");
+            //ui.painter().debug_rect(inner_clip_rect, Color32::PURPLE, "ic");
+    
+            ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui|{
+    
+                let mut start_pos = ui.cursor().min;
+    
+                for grid_row_index in 0..=visible_rows {
+    
+                    let row_number = grid_row_index + cell_origin.row;
+    
+                    let y = start_pos.y + (grid_row_index as f32 * cell_size.y);
+    
+                    // TODO handle individual column sizes
+                    for grid_column_index in 0..=visible_columns {
+    
+                        let column_number = grid_column_index + cell_origin.column;
+                        
+                        let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
+                            Some(CellIndex {
+                                row: cell_origin.row + (grid_row_index - 1),
+                                column: cell_origin.column + (grid_column_index - 1),
+                            })
                         } else {
-                            cell_ui.label(row_number.to_string());
+                            None
+                        };
+    
+                        let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
+    
+                        let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+                        let cell_clip_rect = cell_rect.intersect(inner_max_rect);
+                        //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
+    
+                        if !inner_max_rect.intersects(cell_clip_rect) {
+                            continue;
+                        }
+
+                        //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
+                        let response = ui.allocate_rect(cell_clip_rect, Sense::click());
+
+
+
+                        if cell_index.is_some() {
+                            let bg_color = if response.contains_pointer() {
+                                ui.style().visuals.widgets.hovered.bg_fill
+                        } else {
+                                ui.style().visuals.panel_fill
+                            };
+                            ui.painter()
+                                .with_clip_rect(cell_clip_rect)
+                                .rect_filled(cell_rect, 0.0, bg_color);
+                        }
+    
+                        ui.painter()
+                            .with_clip_rect(cell_clip_rect)
+                            .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+    
+                        let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                        cell_ui.set_clip_rect(cell_clip_rect);
+                        cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    
+                        if let Some(cell_index) = cell_index {
+                            data_source.render_cell(&mut cell_ui, cell_index);
+                        } else {
+                            if grid_row_index == 0 && grid_column_index == 0 {
+                                cell_ui.label("!");
+                            } else if grid_row_index == 0 {
+    
+                                let cell_column_index = cell_origin.column + (grid_column_index - 1);
+    
+                                if let Some(column_name) = builder.table.columns.get(&cell_column_index) {
+                                    cell_ui.label(column_name);
+                                }
+                                else {
+                                    cell_ui.label(column_number.to_string());
+                                }
+                            } else {
+                                cell_ui.label(row_number.to_string());
+                            }
                         }
                     }
                 }
-            }
+            });
         });
 
         // TODO save state to egui memory
@@ -208,6 +246,9 @@ struct DeferredTableState {
 
 pub trait DeferredTableDataSource {
     fn get_dimensions(&self) -> TableDimensions;
+}
+
+pub trait DeferredTableRenderer {
     fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex);
 }
 
@@ -243,7 +284,7 @@ impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
         data_source: &'a DataSource,
     ) -> Self
     where
-        DataSource: DeferredTableDataSource,
+        DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
         let table = Table {
             columns: IndexMap::new(),
@@ -307,14 +348,16 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
 macro_rules! impl_tuple_for_size {
     // Pattern: tuple type names, tuple size, match arms for indexing
     (($($T:ident),*), $size:expr, $( ($idx:expr, $field:tt) ),* ) => {
-        impl<$($T: Display),*> DeferredTableDataSource for &[($($T),*)] {
+        impl<$($T),*> DeferredTableDataSource for &[($($T),*)] {
             fn get_dimensions(&self) -> TableDimensions {
                 TableDimensions {
                     row_count: self.len(),
                     column_count: $size,
                 }
             }
+        }
 
+        impl<$($T: Display),*> DeferredTableRenderer for &[($($T),*)] {
             fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
                 if let Some(row_data) = self.get(cell_index.row) {
                     match cell_index.column {
