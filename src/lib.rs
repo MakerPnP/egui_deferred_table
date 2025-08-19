@@ -17,6 +17,7 @@ pub struct DeferredTable<DataSource> {
 struct DeferredTableParameters {
     default_cell_size: Option<Vec2>,
     default_origin: Option<CellIndex>,
+    zero_based_headers: bool,
 }
 
 impl<DataSource> DeferredTable<DataSource> {
@@ -35,6 +36,16 @@ impl<DataSource> DeferredTable<DataSource> {
 
     pub fn default_origin(mut self, origin: CellIndex) -> Self {
         self.parameters.default_origin = Some(origin);
+        self
+    }
+
+    pub fn zero_based_headers(mut self) -> Self {
+        self.parameters.zero_based_headers = true;
+        self
+    }
+
+    pub fn one_based_headers(mut self) -> Self {
+        self.parameters.zero_based_headers = false;
         self
     }
 
@@ -274,7 +285,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                 if grid_row_index == 0 && grid_column_index == 0 {
-                                    cell_ui.label("!");
+                                    cell_ui.label(format!(
+                                        "{}*{}",
+                                        dimensions.column_count, dimensions.row_count
+                                    ));
                                 } else if grid_row_index == 0 {
                                     let cell_column_index =
                                         cell_origin.column + (grid_column_index - 1);
@@ -283,11 +297,19 @@ impl<DataSource> DeferredTable<DataSource> {
                                         builder.table.columns.get(&cell_column_index)
                                     {
                                         cell_ui.label(column_name);
+                                    } else if self.parameters.zero_based_headers {
+                                        cell_ui.label(cell_column_index.to_string());
                                     } else {
                                         cell_ui.label(column_number.to_string());
                                     }
                                 } else {
-                                    cell_ui.label(row_number.to_string());
+                                    let cell_row_index = cell_origin.row + (grid_row_index - 1);
+
+                                    if self.parameters.zero_based_headers {
+                                        cell_ui.label(cell_row_index.to_string());
+                                    } else {
+                                        cell_ui.label(row_number.to_string());
+                                    }
                                 }
                             }
                         }

@@ -4,7 +4,7 @@ use std::cell::Cell;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt::Display;
-use egui::{Color32, ViewportBuilder};
+use egui::{Color32, Ui, ViewportBuilder};
 use egui_deferred_table::{CellIndex, DeferredTable, DeferredTableBuilder, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
 use log::trace;
 
@@ -34,6 +34,8 @@ struct MyApp {
     inspection: bool,
 
     data: SparseMapSource<CellKind>,
+    
+    ui_state: UiState,
 }
 
 #[derive(Debug)]
@@ -164,49 +166,41 @@ impl Default for MyApp {
         Self {
             inspection: false,
             data,
+            ui_state: UiState::default(),
         }
     }
+}
+
+#[derive(Default)]
+struct UiState {
+    x: usize,
+    y: usize,
+    
+    float_value: f32,
+    boolean_value: bool,
+    text_value: String,
+    
+    kind_choice: Option<CellKindChoice>
+}
+
+enum CellKindChoice {
+    Float,
+    Boolean,
+    Text,
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Sparse data demo");
-                ui.checkbox(&mut self.inspection, "🔍 Inspection");
-            });
+            self.top_panel_content(ui);
+        });
+        
+        egui::SidePanel::left("left_panel").show(ctx, |ui| {
+            self.left_panel_content(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-
-            ui.label("content above");
-            ui.separator();
-            egui::Resize::default()
-                .min_size((100.0, 100.0))
-                .max_size((640.0, 480.0))
-                .show(ui, |ui| {
-
-                    let data_source = &self.data;
-
-                    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-                        .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
-
-                            builder.header(|header_builder| {
-
-                                // no need to define every columns unless there's something specific
-                                
-                            })
-                        });
-
-                    for action in actions {
-                        println!("{:?}", action);
-                    }
-
-                });
-
-            ui.separator();
-            ui.label("content below");
-
+            self.central_panel_content(ui);
         });
 
         // Inspection window
@@ -216,6 +210,115 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| {
                 ctx.inspection_ui(ui);
             });
+    }
+}
+
+impl MyApp {
+    fn left_panel_content(&mut self, ui: &mut Ui) {
+        egui::ScrollArea::both()
+            .show(ui, |ui| {
+                ui.label("Pan and scroll using mouse or scrollbars.");
+                ui.label("Use the form to modify cells.");
+                ui.label("The table adjusts dynamically as sparse data source is changed.");
+                ui.label("For high performance, only the visible cells are rendered.");
+            });
+    }
+
+    fn show_insert_controls(&mut self, ui: &mut Ui) {
+        egui::Frame::group(ui.style())
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("X");
+                    ui.add(egui::DragValue::new(&mut self.ui_state.x));
+                    ui.label("Y");
+                    ui.add(egui::DragValue::new(&mut self.ui_state.y));
+
+                    ui.label("Kind");
+                    egui::ComboBox::from_id_salt("kind_choice")
+                        .selected_text(match self.ui_state.kind_choice {
+                            None => "Select...",
+                            Some(CellKindChoice::Float) => "Float",
+                            Some(CellKindChoice::Boolean) => "Boolean",
+                            Some(CellKindChoice::Text) => "Text",
+                        })
+                        .show_ui(ui, |ui| {
+                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, None), "None")).clicked() {
+                                self.ui_state.kind_choice = None;
+                            }
+                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Float)), "Float")).clicked() {
+                                self.ui_state.kind_choice = Some(CellKindChoice::Float);
+                            }
+                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Boolean)), "Boolean")).clicked() {
+                                self.ui_state.kind_choice = Some(CellKindChoice::Boolean);
+                            }
+                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Text)), "Text")).clicked() {
+                                self.ui_state.kind_choice = Some(CellKindChoice::Text);
+                            }
+                        });
+
+                    match self.ui_state.kind_choice {
+                        None => {}
+                        Some(CellKindChoice::Boolean) => {
+                            ui.add(egui::Checkbox::without_text(&mut self.ui_state.boolean_value));
+                        }
+                        Some(CellKindChoice::Float) => {
+                            ui.add(egui::DragValue::new(&mut self.ui_state.float_value));
+                        }
+                        Some(CellKindChoice::Text) => {
+                            ui.add(egui::TextEdit::singleline(&mut self.ui_state.text_value));
+                        }
+                    }
+
+                    ui.add_enabled_ui(self.ui_state.kind_choice.is_some(), |ui| {
+                        if ui.button("Apply").clicked() {
+                            let value = match self.ui_state.kind_choice.as_ref().unwrap() {
+                                CellKindChoice::Float => CellKind::Float(self.ui_state.float_value),
+                                CellKindChoice::Boolean => CellKind::Boolean(self.ui_state.boolean_value),
+                                CellKindChoice::Text => CellKind::Text(self.ui_state.text_value.clone()),
+                            };
+                            self.data.insert(self.ui_state.x, self.ui_state.y, value);
+                        }
+                    });
+                })
+            });
+    }
+
+    fn central_panel_content(&mut self, ui: &mut Ui) {
+        self.show_insert_controls(ui);
+        
+        ui.separator();
+        
+        egui::Resize::default()
+            .min_size((100.0, 100.0))
+            .max_size((640.0, 480.0))
+            .show(ui, |ui| {
+                let data_source = &self.data;
+
+                let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+                    .zero_based_headers()
+                    .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
+                        builder.header(|header_builder| {
+
+                            // no need to define every column unless there's something specific
+
+                        })
+                    });
+
+                for action in actions {
+                    println!("{:?}", action);
+                }
+            });
+
+        ui.separator();
+        
+        ui.label("content below");
+    }
+
+    fn top_panel_content(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Sparse data demo");
+            ui.checkbox(&mut self.inspection, "🔍 Inspection");
+        });
     }
 }
 
