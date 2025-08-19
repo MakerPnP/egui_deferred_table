@@ -1,7 +1,6 @@
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, CornerRadius, Id, PointerButton, Pos2, Rect, Response, Sense, StrokeKind, Ui,
-    UiBuilder, Vec2,
+    Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
 use log::trace;

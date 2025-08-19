@@ -2,7 +2,6 @@ extern crate core;
 
 use std::cell::Cell;
 use indexmap::IndexMap;
-use std::fmt::Display;
 use egui::{Color32, Ui, ViewportBuilder};
 use fastrand::Rng;
 use egui_deferred_table::{Action, CellIndex, DeferredTable, DeferredTableBuilder, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
@@ -318,7 +317,7 @@ impl MyApp {
                 let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
                     .zero_based_headers()
                     .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
-                        builder.header(|header_builder| {
+                        builder.header(|_header_builder| {
 
                             // no need to define every column unless there's something specific
 
@@ -326,6 +325,7 @@ impl MyApp {
                     });
 
                 for action in actions {
+                    debug!("action: {:?}", action);
                     match action {
                         Action::CellClicked(cell_index) => {
                             self.ui_state.column = cell_index.column;
