@@ -34,6 +34,7 @@ impl<DataSource> DeferredTable<DataSource> {
         self
     }
 
+    // FIXME currently broken after adding scrollbars
     pub fn default_origin(mut self, origin: CellIndex) -> Self {
         self.parameters.default_origin = Some(origin);
         self
@@ -191,6 +192,7 @@ impl<DataSource> DeferredTable<DataSource> {
                         let scroll_column_max = (viewport_rect.max.x / cell_size.x).ceil() as usize + 1;
                         trace!("scroll_column_min: {}, scroll_column_max: {}, ", scroll_column_min, scroll_column_max);
 
+                        // FIXME we shadow the existing cell_origin here, origin handling needs fixing after the addition of scrollbars
                         let cell_origin = CellIndex {
                             row: scroll_row_min,
                             column: scroll_column_min,
