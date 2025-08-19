@@ -25,3 +25,4 @@ include = [
 [dependencies]
 egui = { version = "0.32.0" }
 indexmap = "2.10.0"
+log = "0.4.27"

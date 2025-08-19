@@ -1,9 +1,10 @@
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Align, Color32, CornerRadius, Id, Layout, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
+    Color32, CornerRadius, Id, PointerButton, Pos2, Rect, Response, Sense, StrokeKind, Ui,
     UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
+use log::trace;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
@@ -101,8 +102,9 @@ impl<DataSource> DeferredTable<DataSource> {
         let outer_min_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
         let outer_max_rect = outer_min_rect.union(parent_max_rect);
 
-        //println!("frame");
-        ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui| {
+        trace!("frame");
+        ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
+
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
 
             let inner_clip_rect = ui.clip_rect();
@@ -117,33 +119,26 @@ impl<DataSource> DeferredTable<DataSource> {
             let x_size = inner_max_rect.size().x;
             let possible_rows = (y_size / cell_size.y).ceil() as usize;
             let possible_columns = (x_size / cell_size.x).ceil() as usize;
-            println!(
-                "possible_rows: {}, possible_columns: {}",
-                possible_rows, possible_columns
-            );
+            trace!("possible_rows: {}, possible_columns: {}", possible_rows, possible_columns);
 
             let y_size = inner_clip_rect.size().y;
             let x_size = inner_clip_rect.size().x;
             let visible_possible_rows = (y_size / cell_size.y).ceil() as usize;
             let visible_possible_columns = (x_size / cell_size.x).ceil() as usize;
-            println!(
-                "visible_possible_rows: {}, visible_possible_columns: {}",
-                visible_possible_rows, visible_possible_columns
-            );
+            trace!("visible_possible_rows: {}, visible_possible_columns: {}", visible_possible_rows, visible_possible_columns);
 
             let available_rows = source_state.dimensions.row_count - cell_origin.row;
             let available_columns = source_state.dimensions.column_count - cell_origin.column;
-            println!(
-                "available_rows: {}, available_columns: {}",
-                available_rows, available_columns
-            );
+            trace!("available_rows: {}, available_columns: {}", available_rows, available_columns);
 
             let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
 
             build_table_view(&mut builder);
 
+
             //ui.painter().debug_rect(inner_max_rect, Color32::CYAN, "imr");
             //ui.painter().debug_rect(inner_clip_rect, Color32::PURPLE, "ic");
+
 
             let scroll_style = ui.spacing().scroll;
 
@@ -151,63 +146,57 @@ impl<DataSource> DeferredTable<DataSource> {
             // container for the table and the scroll bars.
             //
 
+
             //
             // display a scrollarea on the right
             //
 
             let total_content_size = Vec2::new(
                 (dimensions.column_count + 1) as f32 * cell_size.x,
-                (dimensions.row_count + 1) as f32 * cell_size.y,
+                (dimensions.row_count + 1) as f32 * cell_size.y
             );
 
-            ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui| {
+            ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui|{
+
+
                 let table_max_rect = Rect::from_min_size(
                     inner_max_rect.min,
                     (
                         inner_max_rect.size().x - scroll_style.bar_width,
                         inner_max_rect.size().y - scroll_style.bar_width,
-                    )
-                        .into(),
+                    ).into()
                 );
 
                 if false {
-                    ui.painter()
-                        .debug_rect(inner_max_rect, Color32::PURPLE, "imr");
-                    ui.painter()
-                        .debug_rect(table_max_rect, Color32::MAGENTA, "tmr");
+                    ui.painter().debug_rect(inner_max_rect, Color32::PURPLE, "imr");
+                    ui.painter().debug_rect(table_max_rect, Color32::MAGENTA, "tmr");
                 }
+
 
                 egui::ScrollArea::both()
                     .id_salt("table_scroll_area")
                     .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                     .show_viewport(ui, |ui, viewport_rect| {
-                        println!("max_rect: {:?}", ui.max_rect());
-                        println!("viewport_rect: {:?}", viewport_rect);
+                        trace!("max_rect: {:?}", ui.max_rect());
+                        trace!("viewport_rect: {:?}", viewport_rect);
 
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
 
-                        let scroll_row_min = (viewport_rect.min.y / cell_size.y).floor() as usize;
-                        let scroll_row_max =
-                            (viewport_rect.max.y / cell_size.y).ceil() as usize + 1;
-                        println!(
-                            "scroll_row_min: {}, scroll_row_max: {}, ",
-                            scroll_row_min, scroll_row_max
-                        );
 
-                        let scroll_column_min =
-                            (viewport_rect.min.x / cell_size.x).floor() as usize;
-                        let scroll_column_max =
-                            (viewport_rect.max.x / cell_size.x).ceil() as usize + 1;
-                        println!(
-                            "scroll_column_min: {}, scroll_column_max: {}, ",
-                            scroll_column_min, scroll_column_max
-                        );
+                        let scroll_row_min = (viewport_rect.min.y / cell_size.y).floor() as usize;
+                        let scroll_row_max = (viewport_rect.max.y / cell_size.y).ceil() as usize + 1;
+                        trace!("scroll_row_min: {}, scroll_row_max: {}, ", scroll_row_min, scroll_row_max);
+
+                        let scroll_column_min = (viewport_rect.min.x / cell_size.x).floor() as usize;
+                        let scroll_column_max = (viewport_rect.max.x / cell_size.x).ceil() as usize + 1;
+                        trace!("scroll_column_min: {}, scroll_column_max: {}, ", scroll_column_min, scroll_column_max);
 
                         let cell_origin = CellIndex {
                             row: scroll_row_min,
                             column: scroll_column_min,
                         };
+
 
                         let y_min = ui.max_rect().top() + scroll_row_min as f32 * cell_size.y;
                         let y_max = ui.max_rect().top() + scroll_row_max as f32 * cell_size.y;
@@ -216,12 +205,12 @@ impl<DataSource> DeferredTable<DataSource> {
                         let x_max = ui.max_rect().left() + scroll_column_max as f32 * cell_size.x;
 
                         let rect = Rect::from_x_y_ranges(x_min..=x_max, y_min..=y_max);
-                        println!("rect: {:?}", rect);
+                        trace!("rect: {:?}", rect);
 
-                        let mut start_pos = table_max_rect.min;
 
                         for grid_row_index in 0..=visible_possible_rows {
                             let row_number = grid_row_index + cell_origin.row;
+
 
                             // TODO handle individual column sizes
                             for grid_column_index in 0..=visible_possible_columns {
@@ -229,14 +218,14 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 if grid_row_index >= 1 && grid_column_index >= 1 {
                                     // no cell rendering
-                                    break;
+                                    break
                                 }
 
-                                if grid_column_index > 0 || grid_row_index > 0 {
-                                    start_pos = rect.min;
+                                let start_pos = if grid_column_index > 0 || grid_row_index > 0 {
+                                    rect.min
                                 } else {
-                                    start_pos = table_max_rect.min;
-                                }
+                                    table_max_rect.min
+                                };
 
                                 let mut y = start_pos.y + (grid_row_index as f32 * cell_size.y);
                                 let mut x = start_pos.x + (grid_column_index as f32 * cell_size.x);
@@ -259,43 +248,31 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 if false {
-                                    ui.painter()
-                                        .debug_rect(cell_clip_rect, Color32::ORANGE, "ccr");
+                                    ui.painter().debug_rect(cell_clip_rect, Color32::ORANGE, "ccr");
                                 }
-
-                                //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
 
                                 if !table_max_rect.intersects(cell_clip_rect) {
                                     continue;
                                 }
 
-                                //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
-                                let response = ui.allocate_rect(cell_clip_rect, Sense::click());
+                                trace!("rendering headers. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
+                                let _response = ui.allocate_rect(cell_clip_rect, Sense::click());
 
-                                ui.painter().with_clip_rect(cell_clip_rect).rect_stroke(
-                                    cell_rect,
-                                    CornerRadius::ZERO,
-                                    ui.style().visuals.widgets.noninteractive.bg_stroke,
-                                    StrokeKind::Inside,
-                                );
+                                ui.painter()
+                                    .with_clip_rect(cell_clip_rect)
+                                    .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
 
-                                let mut cell_ui =
-                                    ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                                let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
                                 cell_ui.set_clip_rect(cell_clip_rect);
                                 cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                 if grid_row_index == 0 && grid_column_index == 0 {
-                                    cell_ui.label(format!(
-                                        "{}*{}",
-                                        dimensions.column_count, dimensions.row_count
-                                    ));
+                                    cell_ui.label(format!("{}*{}", dimensions.column_count, dimensions.row_count));
                                 } else if grid_row_index == 0 {
-                                    let cell_column_index =
-                                        cell_origin.column + (grid_column_index - 1);
 
-                                    if let Some(column_name) =
-                                        builder.table.columns.get(&cell_column_index)
-                                    {
+                                    let cell_column_index = cell_origin.column + (grid_column_index - 1);
+
+                                    if let Some(column_name) = builder.table.columns.get(&cell_column_index) {
                                         cell_ui.label(column_name);
                                     } else if self.parameters.zero_based_headers {
                                         cell_ui.label(cell_column_index.to_string());
@@ -310,13 +287,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                     } else {
                                         cell_ui.label(row_number.to_string());
                                     }
+
                                 }
                             }
                         }
 
-                        let clip_rect =
-                            Rect::from_min_size(table_max_rect.min + cell_size, rect.size())
-                                .intersect(table_max_rect);
+
+                        let clip_rect = Rect::from_min_size(table_max_rect.min + cell_size, rect.size()).intersect(table_max_rect);
                         if false {
                             ui.painter().debug_rect(clip_rect, Color32::CYAN, "cr");
                         }
@@ -326,31 +303,34 @@ impl<DataSource> DeferredTable<DataSource> {
                             // ui.skip_ahead_auto_ids(???); // TODO Make sure we get consistent IDs.
 
                             let table_max_rect = ui.max_rect();
-                            //let table_max_rect = clip_rect;
 
                             //
                             // display the table
                             //
 
-                            //let mut start_pos = ui.cursor().min;
-                            let mut start_pos = table_max_rect.min;
+                            let start_pos = table_max_rect.min;
 
                             for grid_row_index in 1..=visible_possible_rows {
+
                                 let row_number = grid_row_index + cell_origin.row;
 
                                 let y = start_pos.y + (grid_row_index as f32 * cell_size.y);
 
                                 // TODO handle individual column sizes
                                 for grid_column_index in 1..=visible_possible_columns {
+
                                     let column_number = grid_column_index + cell_origin.column;
 
-                                    let cell_index = if grid_row_index > 0 && grid_column_index > 0
-                                    {
+                                    let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
+
                                         let row = cell_origin.row + (grid_row_index - 1);
                                         let column = cell_origin.column + (grid_column_index - 1);
 
                                         if row < available_rows && column < available_columns {
-                                            Some(CellIndex { row, column })
+                                            Some(CellIndex {
+                                                row,
+                                                column,
+                                            })
                                         } else {
                                             None
                                         }
@@ -362,13 +342,12 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
                                     let cell_clip_rect = cell_rect.intersect(clip_rect);
-                                    //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
 
                                     if !table_max_rect.intersects(cell_clip_rect) {
                                         continue;
                                     }
 
-                                    //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
+                                    trace!("rendering cells. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
                                     let response = ui.allocate_rect(cell_clip_rect, Sense::click());
 
                                     if cell_index.is_some() {
@@ -380,35 +359,35 @@ impl<DataSource> DeferredTable<DataSource> {
                                         ui.painter()
                                             .with_clip_rect(cell_clip_rect)
                                             .rect_filled(cell_rect, 0.0, bg_color);
+
+                                        // note: cannot use 'response.clicked()' here as the the cell 'swallows' the click if the contents are interactive.
+                                        if response.contains_pointer() && ui.ctx().input(|i|i.pointer.primary_released()) {
+                                            actions.push(Action::CellClicked(cell_index.unwrap()));
+                                        }
                                     }
 
-                                    ui.painter().with_clip_rect(cell_clip_rect).rect_stroke(
-                                        cell_rect,
-                                        CornerRadius::ZERO,
-                                        ui.style().visuals.widgets.noninteractive.bg_stroke,
-                                        StrokeKind::Inside,
-                                    );
 
-                                    let mut cell_ui =
-                                        ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                                    ui.painter()
+                                        .with_clip_rect(cell_clip_rect)
+                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+
+                                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
                                     cell_ui.set_clip_rect(cell_clip_rect);
-                                    cell_ui.style_mut().wrap_mode =
-                                        Some(egui::TextWrapMode::Extend);
+                                    cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                     if let Some(cell_index) = cell_index {
                                         data_source.render_cell(&mut cell_ui, cell_index);
                                     } else {
                                         if grid_row_index == 0 && grid_column_index == 0 {
-                                            cell_ui.label("!");
+                                            unreachable!();
                                         } else if grid_row_index == 0 {
-                                            let cell_column_index =
-                                                cell_origin.column + (grid_column_index - 1);
 
-                                            if let Some(column_name) =
-                                                builder.table.columns.get(&cell_column_index)
-                                            {
+                                            let cell_column_index = cell_origin.column + (grid_column_index - 1);
+
+                                            if let Some(column_name) = builder.table.columns.get(&cell_column_index) {
                                                 cell_ui.label(column_name);
-                                            } else {
+                                            }
+                                            else {
                                                 cell_ui.label(column_number.to_string());
                                             }
                                         } else {
@@ -418,6 +397,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
                             }
                         });
+
                     });
             });
         });
@@ -430,8 +410,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
 #[derive(Clone, Debug)]
 pub enum Action {
-    Placeholder,
-    // SelectionChanged, etc.
+    CellClicked(CellIndex),
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

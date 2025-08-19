@@ -2,11 +2,12 @@ extern crate core;
 
 use std::cell::Cell;
 use indexmap::IndexMap;
-use std::collections::HashMap;
 use std::fmt::Display;
 use egui::{Color32, Ui, ViewportBuilder};
-use egui_deferred_table::{CellIndex, DeferredTable, DeferredTableBuilder, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
-use log::trace;
+use fastrand::Rng;
+use egui_deferred_table::{Action, CellIndex, DeferredTable, DeferredTableBuilder, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
+use log::{debug, trace};
+use names::Generator;
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -36,6 +37,10 @@ struct MyApp {
     data: SparseMapSource<CellKind>,
     
     ui_state: UiState,
+
+    rng: Rng,
+    name_gen: Generator<'static>,
+
 }
 
 #[derive(Debug)]
@@ -44,7 +49,6 @@ struct SparseMapSource<V> {
 
     // cached dimensions, lazily calculated
     extents: Cell<Option<TableDimensions>>,
-
 }
 
 impl<V> SparseMapSource<V> {
@@ -91,7 +95,7 @@ impl<V> DeferredTableDataSource for SparseMapSource<V> {
             return TableDimensions::default()
         };
 
-        println!("recalculated extents. max_row_index: {}, max_column_index: {}", max_row_index, max_column_index);
+        trace!("recalculated extents. max_row_index: {}, max_column_index: {}", max_row_index, max_column_index);
 
         let extents = TableDimensions {
             row_count: max_row_index + 1,
@@ -131,50 +135,49 @@ impl Default for MyApp {
 
         let mut data = SparseMapSource::new();
 
-        let mut rng = fastrand::Rng::new();
-        let mut name_gen = names::Generator::with_naming(names::Name::Plain);
+        let mut rng = Rng::new();
+        let mut name_gen = Generator::with_naming(names::Name::Plain);
 
         const MAX_ROWS: usize = 40;
         const MAX_COLUMNS: usize = 30;
         const MAX_CELL_VALUES: usize = 50;
+
+        generate_data(&mut data, MAX_ROWS, MAX_COLUMNS, MAX_CELL_VALUES, &mut rng, &mut name_gen);
         
-        debug_assert!(MAX_CELL_VALUES <= MAX_ROWS * MAX_COLUMNS);
-        
-        (0..MAX_CELL_VALUES).for_each(|index| {
-            let (row_index, column_index) = loop {
-                let row_index = rng.usize(0..MAX_ROWS);
-                let column_index = rng.usize(0..MAX_COLUMNS);
-                let value = data.get(row_index, column_index);
-                if value.is_none() {
-                    break (row_index, column_index);
-                }
-            };
-
-            let kind = rng.usize(0..3);
-            let cell_kind= match kind {
-                0 => CellKind::Float(rng.f32()),
-                1 => CellKind::Boolean(rng.bool()),
-                2 => CellKind::Text(name_gen.next().unwrap()),
-                _ => unreachable!()
-            };
-
-            data.insert(row_index, column_index, cell_kind);
-        });
-
-        println!("data: {:?}", data);
-
         Self {
             inspection: false,
             data,
             ui_state: UiState::default(),
+            rng,
+            name_gen,
         }
     }
 }
 
+fn generate_data(data: &mut SparseMapSource<CellKind>, max_rows: usize, max_columns: usize, max_cell_values: usize, rng: &mut Rng, name_gen: &mut Generator) {
+    
+    (0..max_cell_values).for_each(|_index| {
+        let row_index = rng.usize(0..max_rows);
+        let column_index = rng.usize(0..max_columns);
+
+        let kind = rng.usize(0..3);
+        let cell_kind= match kind {
+            0 => CellKind::Float(rng.f32()),
+            1 => CellKind::Boolean(rng.bool()),
+            2 => CellKind::Text(name_gen.next().unwrap()),
+            _ => unreachable!()
+        };
+
+        data.insert(row_index, column_index, cell_kind);
+    });
+
+    trace!("data: {:?}", data);
+}
+
 #[derive(Default)]
 struct UiState {
-    x: usize,
-    y: usize,
+    column: usize,
+    row: usize,
     
     float_value: f32,
     boolean_value: bool,
@@ -225,62 +228,80 @@ impl MyApp {
     }
 
     fn show_insert_controls(&mut self, ui: &mut Ui) {
-        egui::Frame::group(ui.style())
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("X");
-                    ui.add(egui::DragValue::new(&mut self.ui_state.x));
-                    ui.label("Y");
-                    ui.add(egui::DragValue::new(&mut self.ui_state.y));
+        ui.horizontal(|ui| {
+            egui::Frame::group(ui.style())
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Row");
+                        ui.add(egui::DragValue::new(&mut self.ui_state.column));
+                        ui.label("Column");
+                        ui.add(egui::DragValue::new(&mut self.ui_state.row));
 
-                    ui.label("Kind");
-                    egui::ComboBox::from_id_salt("kind_choice")
-                        .selected_text(match self.ui_state.kind_choice {
-                            None => "Select...",
-                            Some(CellKindChoice::Float) => "Float",
-                            Some(CellKindChoice::Boolean) => "Boolean",
-                            Some(CellKindChoice::Text) => "Text",
-                        })
-                        .show_ui(ui, |ui| {
-                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, None), "None")).clicked() {
-                                self.ui_state.kind_choice = None;
+                        ui.label("Kind");
+                        egui::ComboBox::from_id_salt("kind_choice")
+                            .selected_text(match self.ui_state.kind_choice {
+                                None => "Select...",
+                                Some(CellKindChoice::Float) => "Float",
+                                Some(CellKindChoice::Boolean) => "Boolean",
+                                Some(CellKindChoice::Text) => "Text",
+                            })
+                            .show_ui(ui, |ui| {
+                                if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, None), "None")).clicked() {
+                                    self.ui_state.kind_choice = None;
+                                }
+                                if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Float)), "Float")).clicked() {
+                                    self.ui_state.kind_choice = Some(CellKindChoice::Float);
+                                }
+                                if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Boolean)), "Boolean")).clicked() {
+                                    self.ui_state.kind_choice = Some(CellKindChoice::Boolean);
+                                }
+                                if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Text)), "Text")).clicked() {
+                                    self.ui_state.kind_choice = Some(CellKindChoice::Text);
+                                }
+                            });
+
+                        match self.ui_state.kind_choice {
+                            None => {}
+                            Some(CellKindChoice::Boolean) => {
+                                ui.add(egui::Checkbox::without_text(&mut self.ui_state.boolean_value));
                             }
-                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Float)), "Float")).clicked() {
-                                self.ui_state.kind_choice = Some(CellKindChoice::Float);
+                            Some(CellKindChoice::Float) => {
+                                ui.add(egui::DragValue::new(&mut self.ui_state.float_value));
                             }
-                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Boolean)), "Boolean")).clicked() {
-                                self.ui_state.kind_choice = Some(CellKindChoice::Boolean);
+                            Some(CellKindChoice::Text) => {
+                                ui.add(egui::TextEdit::singleline(&mut self.ui_state.text_value));
                             }
-                            if ui.add(egui::Button::selectable(matches!(self.ui_state.kind_choice, Some(CellKindChoice::Text)), "Text")).clicked() {
-                                self.ui_state.kind_choice = Some(CellKindChoice::Text);
+                        }
+
+                        ui.add_enabled_ui(self.ui_state.kind_choice.is_some(), |ui| {
+                            if ui.button("Apply").clicked() {
+                                let value = match self.ui_state.kind_choice.as_ref().unwrap() {
+                                    CellKindChoice::Float => CellKind::Float(self.ui_state.float_value),
+                                    CellKindChoice::Boolean => CellKind::Boolean(self.ui_state.boolean_value),
+                                    CellKindChoice::Text => CellKind::Text(self.ui_state.text_value.clone()),
+                                };
+                                self.data.insert(self.ui_state.row, self.ui_state.column, value);
                             }
                         });
+                    })
+                });
 
-                    match self.ui_state.kind_choice {
-                        None => {}
-                        Some(CellKindChoice::Boolean) => {
-                            ui.add(egui::Checkbox::without_text(&mut self.ui_state.boolean_value));
-                        }
-                        Some(CellKindChoice::Float) => {
-                            ui.add(egui::DragValue::new(&mut self.ui_state.float_value));
-                        }
-                        Some(CellKindChoice::Text) => {
-                            ui.add(egui::TextEdit::singleline(&mut self.ui_state.text_value));
-                        }
+            ui.separator();
+
+            egui::Frame::group(ui.style())
+                .show(ui, |ui| {
+                    if ui.button("Generate random data").clicked() {
+                        generate_data(
+                            &mut self.data, 
+                            self.rng.usize(1..1000),
+                            self.rng.usize(1..1000),
+                            self.rng.usize(1..1000),
+                            &mut self.rng,
+                            &mut self.name_gen
+                        );
                     }
-
-                    ui.add_enabled_ui(self.ui_state.kind_choice.is_some(), |ui| {
-                        if ui.button("Apply").clicked() {
-                            let value = match self.ui_state.kind_choice.as_ref().unwrap() {
-                                CellKindChoice::Float => CellKind::Float(self.ui_state.float_value),
-                                CellKindChoice::Boolean => CellKind::Boolean(self.ui_state.boolean_value),
-                                CellKindChoice::Text => CellKind::Text(self.ui_state.text_value.clone()),
-                            };
-                            self.data.insert(self.ui_state.x, self.ui_state.y, value);
-                        }
-                    });
-                })
-            });
+                });
+        });
     }
 
     fn central_panel_content(&mut self, ui: &mut Ui) {
@@ -305,7 +326,29 @@ impl MyApp {
                     });
 
                 for action in actions {
-                    println!("{:?}", action);
+                    match action {
+                        Action::CellClicked(cell_index) => {
+                            self.ui_state.column = cell_index.column;
+                            self.ui_state.row = cell_index.row;
+                            
+                            if let Some(value) = self.data.get(cell_index.row, cell_index.column) {
+                                match value {
+                                    CellKind::Float(value) => {
+                                        self.ui_state.float_value = *value;
+                                        self.ui_state.kind_choice = Some(CellKindChoice::Float);
+                                    },
+                                    CellKind::Boolean(value) => {
+                                        self.ui_state.boolean_value = *value;
+                                        self.ui_state.kind_choice = Some(CellKindChoice::Boolean);
+                                    },
+                                    CellKind::Text(value) => {
+                                        self.ui_state.text_value = value.clone();
+                                        self.ui_state.kind_choice = Some(CellKindChoice::Text);
+                                    },
+                                }
+                            }
+                        }
+                    }
                 }
             });
 
@@ -386,5 +429,4 @@ mod sparse_map_source_tests {
         // when
         assert_eq!(source.get_dimensions(), TableDimensions { row_count: 10, column_count: 10 });
     }
-
 }
