@@ -1,12 +1,16 @@
+use egui::scroll_area::ScrollBarVisibility;
+use egui::{
+    Align, Color32, CornerRadius, Id, Layout, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
+    UiBuilder, Vec2,
+};
+use indexmap::IndexMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
-use egui::{Align, Color32, CornerRadius, Id, Layout, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2};
-use indexmap::IndexMap;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
     parameters: DeferredTableParameters,
-    phantom_data: PhantomData<DataSource>
+    phantom_data: PhantomData<DataSource>,
 }
 
 #[derive(Default)]
@@ -15,9 +19,7 @@ struct DeferredTableParameters {
     default_origin: Option<CellIndex>,
 }
 
-
 impl<DataSource> DeferredTable<DataSource> {
-
     pub fn new(id: Id) -> Self {
         Self {
             id,
@@ -51,12 +53,18 @@ impl<DataSource> DeferredTable<DataSource> {
 
         // TODO load from egui memory
         let mut state = DeferredTableState {
-            cell_size: self.parameters.default_cell_size.unwrap_or((
-                style.spacing.interact_size.x + (style.spacing.item_spacing.x * 2.0),
-                style.spacing.interact_size.y + (style.spacing.item_spacing.y * 2.0),
-            ).into()),
+            cell_size: self.parameters.default_cell_size.unwrap_or(
+                (
+                    style.spacing.interact_size.x + (style.spacing.item_spacing.x * 2.0),
+                    style.spacing.interact_size.y + (style.spacing.item_spacing.y * 2.0),
+                )
+                    .into(),
+            ),
 
-            cell_origin: self.parameters.default_origin.unwrap_or(CellIndex::default()),
+            cell_origin: self
+                .parameters
+                .default_origin
+                .unwrap_or(CellIndex::default()),
 
             // TODO use a constant for this
             min_size: (400.0, 200.0).into(),
@@ -68,124 +76,327 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let dimensions = data_source.get_dimensions();
 
-        let mut source_state = SourceState {
-            dimensions,
-        };
+        let mut source_state = SourceState { dimensions };
 
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
         if false {
-            ui.painter().debug_rect(parent_max_rect, Color32::GREEN, "pmr");
-            ui.painter().debug_rect(parent_clip_rect, Color32::RED, "pcr");
+            ui.painter()
+                .debug_rect(parent_max_rect, Color32::GREEN, "pmr");
+            ui.painter()
+                .debug_rect(parent_clip_rect, Color32::RED, "pcr");
         }
-        
+
         let outer_min_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
         let outer_max_rect = outer_min_rect.union(parent_max_rect);
 
         //println!("frame");
-        ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
-            
+        ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui| {
+            ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
+
             let inner_clip_rect = ui.clip_rect();
             let inner_max_rect = ui.max_rect();
-            
+
             let cell_size = state.cell_size.clone();
             let cell_origin = state.cell_origin.clone();
             // uncomment to test offset
             //let cell_origin = CellIndex::from((2,3));
-    
-            let visible_rows = source_state.dimensions.row_count - cell_origin.row;
-            let visible_columns = source_state.dimensions.column_count - cell_origin.column;
-    
+
+            let y_size = inner_max_rect.size().y;
+            let x_size = inner_max_rect.size().x;
+            let possible_rows = (y_size / cell_size.y).ceil() as usize;
+            let possible_columns = (x_size / cell_size.x).ceil() as usize;
+            println!(
+                "possible_rows: {}, possible_columns: {}",
+                possible_rows, possible_columns
+            );
+
+            let y_size = inner_clip_rect.size().y;
+            let x_size = inner_clip_rect.size().x;
+            let visible_possible_rows = (y_size / cell_size.y).ceil() as usize;
+            let visible_possible_columns = (x_size / cell_size.x).ceil() as usize;
+            println!(
+                "visible_possible_rows: {}, visible_possible_columns: {}",
+                visible_possible_rows, visible_possible_columns
+            );
+
+            let available_rows = source_state.dimensions.row_count - cell_origin.row;
+            let available_columns = source_state.dimensions.column_count - cell_origin.column;
+            println!(
+                "available_rows: {}, available_columns: {}",
+                available_rows, available_columns
+            );
+
             let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
-    
+
             build_table_view(&mut builder);
-    
-            //
-            // display the table
-            //
-    
+
             //ui.painter().debug_rect(inner_max_rect, Color32::CYAN, "imr");
             //ui.painter().debug_rect(inner_clip_rect, Color32::PURPLE, "ic");
-    
-            ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui|{
-    
-                let mut start_pos = ui.cursor().min;
-    
-                for grid_row_index in 0..=visible_rows {
-    
-                    let row_number = grid_row_index + cell_origin.row;
-    
-                    let y = start_pos.y + (grid_row_index as f32 * cell_size.y);
-    
-                    // TODO handle individual column sizes
-                    for grid_column_index in 0..=visible_columns {
-    
-                        let column_number = grid_column_index + cell_origin.column;
-                        
-                        let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
-                            Some(CellIndex {
-                                row: cell_origin.row + (grid_row_index - 1),
-                                column: cell_origin.column + (grid_column_index - 1),
-                            })
-                        } else {
-                            None
+
+            let scroll_style = ui.spacing().scroll;
+
+            //
+            // container for the table and the scroll bars.
+            //
+
+            //
+            // display a scrollarea on the right
+            //
+
+            let total_content_size = Vec2::new(
+                (dimensions.column_count + 1) as f32 * cell_size.x,
+                (dimensions.row_count + 1) as f32 * cell_size.y,
+            );
+
+            ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui| {
+                let table_max_rect = Rect::from_min_size(
+                    inner_max_rect.min,
+                    (
+                        inner_max_rect.size().x - scroll_style.bar_width,
+                        inner_max_rect.size().y - scroll_style.bar_width,
+                    )
+                        .into(),
+                );
+
+                if false {
+                    ui.painter()
+                        .debug_rect(inner_max_rect, Color32::PURPLE, "imr");
+                    ui.painter()
+                        .debug_rect(table_max_rect, Color32::MAGENTA, "tmr");
+                }
+
+                egui::ScrollArea::both()
+                    .id_salt("table_scroll_area")
+                    .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
+                    .show_viewport(ui, |ui, viewport_rect| {
+                        println!("max_rect: {:?}", ui.max_rect());
+                        println!("viewport_rect: {:?}", viewport_rect);
+
+                        ui.set_height(total_content_size.y);
+                        ui.set_width(total_content_size.x);
+
+                        let scroll_row_min = (viewport_rect.min.y / cell_size.y).floor() as usize;
+                        let scroll_row_max =
+                            (viewport_rect.max.y / cell_size.y).ceil() as usize + 1;
+                        println!(
+                            "scroll_row_min: {}, scroll_row_max: {}, ",
+                            scroll_row_min, scroll_row_max
+                        );
+
+                        let scroll_column_min =
+                            (viewport_rect.min.x / cell_size.x).floor() as usize;
+                        let scroll_column_max =
+                            (viewport_rect.max.x / cell_size.x).ceil() as usize + 1;
+                        println!(
+                            "scroll_column_min: {}, scroll_column_max: {}, ",
+                            scroll_column_min, scroll_column_max
+                        );
+
+                        let cell_origin = CellIndex {
+                            row: scroll_row_min,
+                            column: scroll_column_min,
                         };
-    
-                        let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
-    
-                        let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
-                        let cell_clip_rect = cell_rect.intersect(inner_max_rect);
-                        //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
-    
-                        if !inner_max_rect.intersects(cell_clip_rect) {
-                            continue;
-                        }
 
-                        //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
-                        let response = ui.allocate_rect(cell_clip_rect, Sense::click());
+                        let y_min = ui.max_rect().top() + scroll_row_min as f32 * cell_size.y;
+                        let y_max = ui.max_rect().top() + scroll_row_max as f32 * cell_size.y;
 
+                        let x_min = ui.max_rect().left() + scroll_column_min as f32 * cell_size.x;
+                        let x_max = ui.max_rect().left() + scroll_column_max as f32 * cell_size.x;
 
+                        let rect = Rect::from_x_y_ranges(x_min..=x_max, y_min..=y_max);
+                        println!("rect: {:?}", rect);
 
-                        if cell_index.is_some() {
-                            let bg_color = if response.contains_pointer() {
-                                ui.style().visuals.widgets.hovered.bg_fill
-                        } else {
-                                ui.style().visuals.panel_fill
-                            };
-                            ui.painter()
-                                .with_clip_rect(cell_clip_rect)
-                                .rect_filled(cell_rect, 0.0, bg_color);
-                        }
-    
-                        ui.painter()
-                            .with_clip_rect(cell_clip_rect)
-                            .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
-    
-                        let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
-                        cell_ui.set_clip_rect(cell_clip_rect);
-                        cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-    
-                        if let Some(cell_index) = cell_index {
-                            data_source.render_cell(&mut cell_ui, cell_index);
-                        } else {
-                            if grid_row_index == 0 && grid_column_index == 0 {
-                                cell_ui.label("!");
-                            } else if grid_row_index == 0 {
-    
-                                let cell_column_index = cell_origin.column + (grid_column_index - 1);
-    
-                                if let Some(column_name) = builder.table.columns.get(&cell_column_index) {
-                                    cell_ui.label(column_name);
+                        let mut start_pos = table_max_rect.min;
+
+                        for grid_row_index in 0..=visible_possible_rows {
+                            let row_number = grid_row_index + cell_origin.row;
+
+                            // TODO handle individual column sizes
+                            for grid_column_index in 0..=visible_possible_columns {
+                                let column_number = grid_column_index + cell_origin.column;
+
+                                if grid_row_index >= 1 && grid_column_index >= 1 {
+                                    // no cell rendering
+                                    break;
                                 }
-                                else {
-                                    cell_ui.label(column_number.to_string());
+
+                                if grid_column_index > 0 || grid_row_index > 0 {
+                                    start_pos = rect.min;
+                                } else {
+                                    start_pos = table_max_rect.min;
                                 }
-                            } else {
-                                cell_ui.label(row_number.to_string());
+
+                                let mut y = start_pos.y + (grid_row_index as f32 * cell_size.y);
+                                let mut x = start_pos.x + (grid_column_index as f32 * cell_size.x);
+
+                                if grid_row_index == 0 {
+                                    y = table_max_rect.min.y;
+                                }
+                                if grid_column_index == 0 {
+                                    x = table_max_rect.min.x;
+                                }
+
+                                let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+
+                                let mut cell_clip_rect = cell_rect.intersect(table_max_rect);
+                                if grid_row_index == 1 {
+                                    cell_clip_rect.min.y = table_max_rect.min.y + cell_size.y;
+                                }
+                                if grid_column_index == 1 {
+                                    cell_clip_rect.min.x = table_max_rect.min.x + cell_size.x;
+                                }
+
+                                if false {
+                                    ui.painter()
+                                        .debug_rect(cell_clip_rect, Color32::ORANGE, "ccr");
+                                }
+
+                                //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
+
+                                if !table_max_rect.intersects(cell_clip_rect) {
+                                    continue;
+                                }
+
+                                //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
+                                let response = ui.allocate_rect(cell_clip_rect, Sense::click());
+
+                                ui.painter().with_clip_rect(cell_clip_rect).rect_stroke(
+                                    cell_rect,
+                                    CornerRadius::ZERO,
+                                    ui.style().visuals.widgets.noninteractive.bg_stroke,
+                                    StrokeKind::Inside,
+                                );
+
+                                let mut cell_ui =
+                                    ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                                cell_ui.set_clip_rect(cell_clip_rect);
+                                cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+
+                                if grid_row_index == 0 && grid_column_index == 0 {
+                                    cell_ui.label("!");
+                                } else if grid_row_index == 0 {
+                                    let cell_column_index =
+                                        cell_origin.column + (grid_column_index - 1);
+
+                                    if let Some(column_name) =
+                                        builder.table.columns.get(&cell_column_index)
+                                    {
+                                        cell_ui.label(column_name);
+                                    } else {
+                                        cell_ui.label(column_number.to_string());
+                                    }
+                                } else {
+                                    cell_ui.label(row_number.to_string());
+                                }
                             }
                         }
-                    }
-                }
+
+                        let clip_rect =
+                            Rect::from_min_size(table_max_rect.min + cell_size, rect.size())
+                                .intersect(table_max_rect);
+                        if false {
+                            ui.painter().debug_rect(clip_rect, Color32::CYAN, "cr");
+                        }
+
+                        ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+                            ui.set_clip_rect(clip_rect);
+                            // ui.skip_ahead_auto_ids(???); // TODO Make sure we get consistent IDs.
+
+                            let table_max_rect = ui.max_rect();
+                            //let table_max_rect = clip_rect;
+
+                            //
+                            // display the table
+                            //
+
+                            //let mut start_pos = ui.cursor().min;
+                            let mut start_pos = table_max_rect.min;
+
+                            for grid_row_index in 1..=visible_possible_rows {
+                                let row_number = grid_row_index + cell_origin.row;
+
+                                let y = start_pos.y + (grid_row_index as f32 * cell_size.y);
+
+                                // TODO handle individual column sizes
+                                for grid_column_index in 1..=visible_possible_columns {
+                                    let column_number = grid_column_index + cell_origin.column;
+
+                                    let cell_index = if grid_row_index > 0 && grid_column_index > 0
+                                    {
+                                        let row = cell_origin.row + (grid_row_index - 1);
+                                        let column = cell_origin.column + (grid_column_index - 1);
+
+                                        if row < available_rows && column < available_columns {
+                                            Some(CellIndex { row, column })
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    };
+
+                                    let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
+
+                                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
+                                    let cell_clip_rect = cell_rect.intersect(clip_rect);
+                                    //ui.painter().debug_rect(render_rect, Color32::GRAY, "rr");
+
+                                    if !table_max_rect.intersects(cell_clip_rect) {
+                                        continue;
+                                    }
+
+                                    //println!("rendering. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
+                                    let response = ui.allocate_rect(cell_clip_rect, Sense::click());
+
+                                    if cell_index.is_some() {
+                                        let bg_color = if response.contains_pointer() {
+                                            ui.style().visuals.widgets.hovered.bg_fill
+                                        } else {
+                                            ui.style().visuals.panel_fill
+                                        };
+                                        ui.painter()
+                                            .with_clip_rect(cell_clip_rect)
+                                            .rect_filled(cell_rect, 0.0, bg_color);
+                                    }
+
+                                    ui.painter().with_clip_rect(cell_clip_rect).rect_stroke(
+                                        cell_rect,
+                                        CornerRadius::ZERO,
+                                        ui.style().visuals.widgets.noninteractive.bg_stroke,
+                                        StrokeKind::Inside,
+                                    );
+
+                                    let mut cell_ui =
+                                        ui.new_child(UiBuilder::new().max_rect(cell_rect));
+                                    cell_ui.set_clip_rect(cell_clip_rect);
+                                    cell_ui.style_mut().wrap_mode =
+                                        Some(egui::TextWrapMode::Extend);
+
+                                    if let Some(cell_index) = cell_index {
+                                        data_source.render_cell(&mut cell_ui, cell_index);
+                                    } else {
+                                        if grid_row_index == 0 && grid_column_index == 0 {
+                                            cell_ui.label("!");
+                                        } else if grid_row_index == 0 {
+                                            let cell_column_index =
+                                                cell_origin.column + (grid_column_index - 1);
+
+                                            if let Some(column_name) =
+                                                builder.table.columns.get(&cell_column_index)
+                                            {
+                                                cell_ui.label(column_name);
+                                            } else {
+                                                cell_ui.label(column_number.to_string());
+                                            }
+                                        } else {
+                                            cell_ui.label(row_number.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    });
             });
         });
 
@@ -233,7 +444,6 @@ impl From<(usize, usize)> for TableDimensions {
     }
 }
 
-
 #[derive(Default)]
 struct DeferredTableState {
     min_size: Vec2,
@@ -263,17 +473,19 @@ pub struct DeferredTableBuilder<'a, DataSource> {
 
 impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
     pub fn header(&mut self, builder_header_view: fn(&'_ mut HeaderBuilder<'_, DataSource>)) {
-
-        let mut header_builder = HeaderBuilder::new(&mut self.table, self.state, &mut self.source_state, self.data_source);
+        let mut header_builder = HeaderBuilder::new(
+            &mut self.table,
+            self.state,
+            &mut self.source_state,
+            self.data_source,
+        );
 
         builder_header_view(&mut header_builder);
-
     }
 }
 
 struct Table {
     columns: IndexMap<usize, String>,
-
     // TODO column groups here..
 }
 
@@ -376,17 +588,17 @@ macro_rules! impl_deferred_table_for_tuple {
     ((A, B), 2) => {
         impl_tuple_for_size!((A, B), 2, (0, 0), (1, 1));
     };
-    
+
     // 3-tuple
     ((A, B, C), 3) => {
         impl_tuple_for_size!((A, B, C), 3, (0, 0), (1, 1), (2, 2));
     };
-    
+
     // 4-tuple
     ((A, B, C, D), 4) => {
         impl_tuple_for_size!((A, B, C, D), 4, (0, 0), (1, 1), (2, 2), (3, 3));
     };
-    
+
     // 5-tuple
     ((A, B, C, D, E), 5) => {
         impl_tuple_for_size!((A, B, C, D, E), 5, (0, 0), (1, 1), (2, 2), (3, 3), (4, 4));

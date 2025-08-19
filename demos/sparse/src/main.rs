@@ -183,7 +183,7 @@ impl eframe::App for MyApp {
             ui.separator();
             egui::Resize::default()
                 .min_size((100.0, 100.0))
-                .max_size((1280.0, 960.0))
+                .max_size((640.0, 480.0))
                 .show(ui, |ui| {
 
                     let data_source = &self.data;
