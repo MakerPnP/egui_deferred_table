@@ -34,12 +34,6 @@ impl<DataSource> DeferredTable<DataSource> {
         self
     }
 
-    // FIXME currently broken after adding scrollbars
-    pub fn default_origin(mut self, origin: CellIndex) -> Self {
-        self.parameters.default_origin = Some(origin);
-        self
-    }
-
     pub fn zero_based_headers(mut self) -> Self {
         self.parameters.zero_based_headers = true;
         self
@@ -72,11 +66,6 @@ impl<DataSource> DeferredTable<DataSource> {
                 )
                     .into(),
             ),
-
-            cell_origin: self
-                .parameters
-                .default_origin
-                .unwrap_or(CellIndex::default()),
 
             // TODO use a constant for this
             min_size: (400.0, 200.0).into(),
@@ -111,9 +100,6 @@ impl<DataSource> DeferredTable<DataSource> {
             let inner_max_rect = ui.max_rect();
 
             let cell_size = state.cell_size.clone();
-            let cell_origin = state.cell_origin.clone();
-            // uncomment to test offset
-            //let cell_origin = CellIndex::from((2,3));
 
             let y_size = inner_max_rect.size().y;
             let x_size = inner_max_rect.size().x;
@@ -127,8 +113,8 @@ impl<DataSource> DeferredTable<DataSource> {
             let visible_possible_columns = (x_size / cell_size.x).ceil() as usize;
             trace!("visible_possible_rows: {}, visible_possible_columns: {}", visible_possible_rows, visible_possible_columns);
 
-            let available_rows = source_state.dimensions.row_count - cell_origin.row;
-            let available_columns = source_state.dimensions.column_count - cell_origin.column;
+            let available_rows = source_state.dimensions.row_count;
+            let available_columns = source_state.dimensions.column_count;
             trace!("available_rows: {}, available_columns: {}", available_rows, available_columns);
 
             let mut builder = DeferredTableBuilder::new(&mut state, &mut source_state, data_source);
@@ -192,7 +178,6 @@ impl<DataSource> DeferredTable<DataSource> {
                         let scroll_column_max = (viewport_rect.max.x / cell_size.x).ceil() as usize + 1;
                         trace!("scroll_column_min: {}, scroll_column_max: {}, ", scroll_column_min, scroll_column_max);
 
-                        // FIXME we shadow the existing cell_origin here, origin handling needs fixing after the addition of scrollbars
                         let cell_origin = CellIndex {
                             row: scroll_row_min,
                             column: scroll_column_min,
@@ -212,7 +197,6 @@ impl<DataSource> DeferredTable<DataSource> {
                         for grid_row_index in 0..=visible_possible_rows {
                             let row_number = grid_row_index + cell_origin.row;
 
-
                             // TODO handle individual column sizes
                             for grid_column_index in 0..=visible_possible_columns {
                                 let column_number = grid_column_index + cell_origin.column;
@@ -221,6 +205,12 @@ impl<DataSource> DeferredTable<DataSource> {
                                     // no cell rendering
                                     break
                                 }
+
+                                if grid_row_index + cell_origin.row > dimensions.row_count ||
+                                    grid_column_index + cell_origin.column > dimensions.column_count {
+                                    break
+                                }
+
 
                                 let start_pos = if grid_column_index > 0 || grid_row_index > 0 {
                                     rect.min
@@ -322,19 +312,19 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     let column_number = grid_column_index + cell_origin.column;
 
-                                    let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
+                                    if grid_row_index + cell_origin.row > dimensions.row_count ||
+                                        grid_column_index + cell_origin.column > dimensions.column_count {
+                                        break
+                                    }
 
+                                    let cell_index = if grid_row_index > 0 && grid_column_index > 0 {
                                         let row = cell_origin.row + (grid_row_index - 1);
                                         let column = cell_origin.column + (grid_column_index - 1);
 
-                                        if row < available_rows && column < available_columns {
-                                            Some(CellIndex {
-                                                row,
-                                                column,
-                                            })
-                                        } else {
-                                            None
-                                        }
+                                        Some(CellIndex {
+                                            row,
+                                            column,
+                                        })
                                     } else {
                                         None
                                     };
@@ -450,7 +440,6 @@ impl From<(usize, usize)> for TableDimensions {
 struct DeferredTableState {
     min_size: Vec2,
     cell_size: Vec2,
-    cell_origin: CellIndex,
     // TODO column ordering
     // TODO column visibility
     // TODO cell selection
