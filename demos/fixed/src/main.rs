@@ -56,7 +56,11 @@ impl eframe::App for MyApp {
 
             ui.label("content above scroll area");
             ui.separator();
-            
+
+            // FIXME there are rendering issues when the window containing the scroll area is resized vertically so it's
+            //       shorter than the default minimum size of the table, happens horizontally too.
+            //       two scroll bars appear, one set for the table itself, one set for this scroll area.
+
             egui::ScrollArea::both()
                 .max_height(400.0)
                 .show(ui, |ui| {
