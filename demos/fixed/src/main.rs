@@ -3,6 +3,9 @@ extern crate core;
 use std::fmt::Display;
 use egui::{ViewportBuilder};
 use egui_deferred_table::{DeferredTable, DeferredTableBuilder};
+use crate::futurama::{Kind, RowType};
+
+mod futurama;
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -19,21 +22,11 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-#[derive(Debug)]
-enum Kind {
-    Human,
-    Alien,
-    Mutant,
-    Robot,
-}
-
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", format!("{:?}", self).to_lowercase())
     }
 }
-
-type RowType = (String, Kind, usize, f32);
 
 struct MyApp {
     inspection: bool,
@@ -45,14 +38,7 @@ impl Default for MyApp {
     fn default() -> Self {
         Self {
             inspection: false,
-            data: vec![
-                ("Fry".to_string(), Kind::Human, 30, 69.0),
-                ("Leela".to_string(), Kind::Mutant, 32, 42.0),
-                ("Bender".to_string(), Kind::Robot, 28, 42.0),
-                ("Zoidberg".to_string(), Kind::Alien, 40, 42.0),
-                ("Nibbler".to_string(), Kind::Alien, 69, 42.0),
-                ("Farnsworth".to_string(), Kind::Human, 90, 42.0),
-            ],
+            data: futurama::characters(),
         }
     }
 }
@@ -68,11 +54,13 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
 
-            ui.label("content above");
+            ui.label("content above scroll area");
             ui.separator();
+            
             egui::ScrollArea::both()
+                .max_height(400.0)
                 .show(ui, |ui| {
-
+                    
                     let data_source = self.data.as_slice();
 
                     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
@@ -80,25 +68,20 @@ impl eframe::App for MyApp {
 
                             builder.header(|header_builder| {
 
-                                header_builder
-                                    .column(0, "Name".to_string());
-                                header_builder
-                                    .column(1, "Kind".to_string());
-                                header_builder
-                                    .column(2, "usize".to_string());
-                                header_builder
-                                    .column(3, "f32".to_string());
+                                for (index, field) in futurama::fields().iter().enumerate() {
+                                    header_builder
+                                        .column(index, field.to_string());
+                                }
                             })
                         });
 
                     for action in actions {
                         println!("{:?}", action);
                     }
-
                 });
-
+            
             ui.separator();
-            ui.label("content below");
+            ui.label("content below scroll area");
 
         });
 
