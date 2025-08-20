@@ -60,6 +60,8 @@ impl eframe::App for MyApp {
             egui::ScrollArea::both()
                 .max_height(400.0)
                 .show(ui, |ui| {
+                    // FIXME the table renders on top of this
+                    ui.label("content above table, inside scroll area");
                     
                     let data_source = self.data.as_slice();
 
@@ -78,6 +80,8 @@ impl eframe::App for MyApp {
                     for action in actions {
                         println!("{:?}", action);
                     }
+
+                    ui.label("content below table, inside scroll area");
                 });
             
             ui.separator();
