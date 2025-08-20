@@ -79,6 +79,12 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let mut source_state = SourceState { dimensions };
 
+        let available_rect_before_wrap = ui.available_rect_before_wrap();
+        if false {
+            ui.painter()
+                .debug_rect(available_rect_before_wrap, Color32::WHITE, "arbr");
+        }
+
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
         if false {
@@ -91,6 +97,12 @@ impl<DataSource> DeferredTable<DataSource> {
         let outer_min_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
         let outer_max_rect = outer_min_rect.union(parent_max_rect);
 
+        if false {
+            ui.painter()
+                .debug_rect(outer_min_rect, Color32::GREEN, "omnr");
+            ui.painter()
+                .debug_rect(outer_max_rect, Color32::RED, "omxr");
+        }
         trace!("frame");
         ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
 
@@ -237,6 +249,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if grid_column_index == 1 {
                                     cell_clip_rect.min.x = table_max_rect.min.x + cell_size.x;
                                 }
+                                let cell_clip_rect = cell_clip_rect.intersect(parent_clip_rect);
 
                                 if false {
                                     ui.painter().debug_rect(cell_clip_rect, Color32::ORANGE, "ccr");
@@ -332,7 +345,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let x = start_pos.x + (grid_column_index as f32 * cell_size.x);
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), cell_size);
-                                    let cell_clip_rect = cell_rect.intersect(clip_rect);
+                                    let cell_clip_rect = cell_rect.intersect(clip_rect).intersect(parent_clip_rect);
 
                                     if !table_max_rect.intersects(cell_clip_rect) {
                                         continue;
