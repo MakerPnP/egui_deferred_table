@@ -1,5 +1,4 @@
 use egui::{Response, Ui};
-use log::Level;
 use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
 use crate::spreadsheet::SpreadsheetSource;
 
@@ -16,7 +15,7 @@ impl Default for SpreadsheetState {
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<Action>) {
-    let mut data_source = &mut state.data_source;
+    let data_source = &mut state.data_source;
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {

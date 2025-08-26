@@ -142,18 +142,18 @@ impl DeferredTableRenderer for SpreadsheetSource {
     }
 }
 
-enum CellValue {
+pub enum CellValue {
     Calculated(Formula, FormulaResult),
     Value(Value),
 }
 
 #[derive(Clone)]
-enum Value {
+pub enum Value {
     Text(String),
     Decimal(Decimal),
 }
 
-struct Formula {
+pub struct Formula {
     formula: String,
 }
 
@@ -163,7 +163,7 @@ impl Formula {
     }
 }
 
-enum FormulaResult {
+pub enum FormulaResult {
     Value(Value),
     Error(String),
 }

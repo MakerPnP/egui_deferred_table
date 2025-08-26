@@ -1,5 +1,7 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui, UiBuilder, Vec2};
+use egui::{
+    Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui, UiBuilder, Vec2,
+};
 use indexmap::IndexMap;
 use log::trace;
 use std::fmt::Display;
@@ -22,7 +24,7 @@ impl Default for DeferredTableParameters {
         Self {
             default_cell_size: None,
             zero_based_headers: false,
-            min_size: Vec2::new(400.0,200.0),
+            min_size: Vec2::new(400.0, 200.0),
         }
     }
 }
@@ -112,11 +114,16 @@ impl<DataSource> DeferredTable<DataSource> {
         // the x/y of this can have negative values if the OUTER scroll area is scrolled right or down, respectively.
         // i.e. if the outer scroll area scrolled down, the y will be negative, above the visible area.
         let outer_next_widget_position = ui.next_widget_position();
-        trace!("outer_next_widget_position: {:?}", outer_next_widget_position);
+        trace!(
+            "outer_next_widget_position: {:?}",
+            outer_next_widget_position
+        );
 
         // if there is content above the table, we use this min rect so we to define an area starting at the right place.
-        let outer_min_rect = Rect::from_min_size(outer_next_widget_position, state.min_size.clone());
-        let outer_max_rect = Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
+        let outer_min_rect =
+            Rect::from_min_size(outer_next_widget_position, state.min_size.clone());
+        let outer_max_rect =
+            Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
         trace!("outer_min_rect: {:?}", outer_min_rect);
         trace!("outer_max_rect: {:?}", outer_max_rect);
 
