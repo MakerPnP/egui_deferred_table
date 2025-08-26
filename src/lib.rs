@@ -52,7 +52,7 @@ impl<DataSource> DeferredTable<DataSource> {
         self.parameters.zero_based_headers = false;
         self
     }
-    
+
     pub fn min_size(mut self, size: Vec2) -> Self {
         self.parameters.min_size = size;
         self
@@ -67,6 +67,8 @@ impl<DataSource> DeferredTable<DataSource> {
     where
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
+        trace!("table");
+
         let mut actions = vec![];
 
         let style = ui.style();
@@ -109,8 +111,16 @@ impl<DataSource> DeferredTable<DataSource> {
                 .debug_rect(parent_clip_rect, Color32::RED, "pcr");
         }
 
-        let outer_min_rect = Rect::from_min_size(ui.next_widget_position(), state.min_size.clone());
-        let outer_max_rect = outer_min_rect.union(parent_max_rect);
+        // the x/y of this can have negative values if the OUTER scroll area is scrolled right or down, respectively.
+        // i.e. if the outer scroll area scrolled down, the y will be negative, above the visible area.
+        let outer_next_widget_position = ui.next_widget_position();
+        trace!("outer_next_widget_position: {:?}", outer_next_widget_position);
+
+        // if there is content above the table, we use this min rect so we to define an area starting at the right place.
+        let outer_min_rect = Rect::from_min_size(outer_next_widget_position, state.min_size.clone());
+        let outer_max_rect = Rect::from_min_size(outer_next_widget_position, parent_clip_rect.size());
+        trace!("outer_min_rect: {:?}", outer_min_rect);
+        trace!("outer_max_rect: {:?}", outer_max_rect);
 
         if false {
             ui.painter()
@@ -118,7 +128,6 @@ impl<DataSource> DeferredTable<DataSource> {
             ui.painter()
                 .debug_rect(outer_max_rect, Color32::RED, "omxr");
         }
-        trace!("frame");
         ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
 
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
@@ -171,7 +180,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
             ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui|{
 
-
+                // table_max_rect is the rect INSIDE any OUTER scroll area, e.g. when *this* table is rendered inside a scrollarea
+                // as the outer scroll area is scrolled,
                 let table_max_rect = Rect::from_min_size(
                     inner_max_rect.min,
                     (
@@ -179,6 +189,8 @@ impl<DataSource> DeferredTable<DataSource> {
                         inner_max_rect.size().y - scroll_style.bar_width,
                     ).into()
                 );
+                //ui.ctx().debug_painter().debug_rect(table_max_rect, Color32::MAGENTA, "tmr");
+                trace!("table_max_rect: {:?}", table_max_rect);
 
                 if false {
                     ui.painter().debug_rect(inner_max_rect, Color32::PURPLE, "imr");
@@ -192,6 +204,7 @@ impl<DataSource> DeferredTable<DataSource> {
                     .show_viewport(ui, |ui, viewport_rect| {
                         trace!("max_rect: {:?}", ui.max_rect());
                         trace!("viewport_rect: {:?}", viewport_rect);
+                        //ui.ctx().debug_painter().debug_rect(viewport_rect, Color32::CYAN, "vr");
 
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
