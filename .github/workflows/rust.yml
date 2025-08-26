@@ -26,8 +26,10 @@ jobs:
       run: cargo test --verbose
     - name: Run tests (all features)
       run: cargo test --verbose --all-features
-    - name: Run demo tests (fixed)
-      run: cd demos/fixed && cargo test --verbose
+    - name: Run shared tests
+      run: cd demos/shared && cargo test --verbose
+    - name: Run demo tests (docking)
+      run: cd demos/docking && cargo test --verbose
     - name: Run demo tests (sparse)
       run: cd demos/sparse && cargo test --verbose
     - name: Run demo tests (spreadsheet)

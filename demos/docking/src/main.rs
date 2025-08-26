@@ -6,7 +6,8 @@ use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
+use shared::spreadsheet::SpreadsheetSource;
 use crate::futurama::{Kind, RowType};
 
 mod futurama;
@@ -49,14 +50,14 @@ impl Default for MyApp {
         let mut log_entries = vec![];
 
         let mut tree = DockState::new(vec![
-            Tab { name: "Tool windows in a tab", kind: TabKind::TableInsideScrollArea { state: Arc::new(Mutex::new(InsideScrollAreaState::default()))} },
+            Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: Arc::new(Mutex::new(SpreadsheetState::default()))}   },
         ]);
 
         // You can modify the tree before constructing the dock
         let [a, _b] =
             tree.main_surface_mut()
                 .split_left(NodeIndex::root(), 0.3, vec![
-                    Tab { name: "Example Table", kind: TabKind::TableInsideScrollArea { state: Arc::new(Mutex::new(InsideScrollAreaState::default()))}   },
+                    Tab { name: "Tables in a tab", kind: TabKind::TableInsideScrollArea { state: Arc::new(Mutex::new(InsideScrollAreaState::default()))} },
                 ]);
         let [_, _] = tree
             .main_surface_mut()
@@ -123,6 +124,7 @@ struct Tab {
 enum TabKind {
     TableInsideScrollArea { state: Arc<Mutex<InsideScrollAreaState>> },
     SimpleTable { state: Arc<Mutex<SimpleTableState>> },
+    Spreadsheet { state: Arc<Mutex<SpreadsheetState>> },
     Log { state: Arc<Mutex<LogState>> },
 }
 
@@ -134,6 +136,9 @@ impl TabKind {
             }
             TabKind::SimpleTable { state } => {
                 contents_simple_table(ui, context, state.lock().as_mut().unwrap());
+            }
+            TabKind::Spreadsheet { state } => {
+                contents_spreadsheet(ui, context, state.lock().as_mut().unwrap());
             }
             TabKind::Log { state } => {
                 contents_log(ui, context, state.lock().as_mut().unwrap());
@@ -267,3 +272,49 @@ pub struct LogState {
     // here would could add a filter, etc.
 }
 
+fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
+
+
+    let mut data_source = &mut state.data_source;
+
+    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+        .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {
+
+            builder.header(|header_builder| {
+
+                let TableDimensions { row_count: _, column_count } = header_builder.current_dimensions();
+
+                for index in 0..column_count {
+                    let column_name = SpreadsheetSource::make_column_name(index);
+                    header_builder
+                        .column(index, column_name);
+                }
+
+                // header_builder.create_group("Group 1", Some([0,1,2]));
+                // header_builder.create_group("Remainder", None);
+            })
+        });
+
+
+    for action in actions {
+        match action {
+            Action::CellClicked(cell_index) => {
+                example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
+            }
+        }
+    }
+}
+
+
+pub struct SpreadsheetState {
+    data_source: SpreadsheetSource,
+}
+
+
+impl Default for SpreadsheetState {
+    fn default() -> Self {
+        Self {
+            data_source: SpreadsheetSource::new(),
+        }
+    }
+}

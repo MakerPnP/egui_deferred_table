@@ -866,6 +866,7 @@ dependencies = [
  "log",
  "rust_decimal",
  "rust_decimal_macros",
+ "shared",
 ]
 
 [[package]]
@@ -2770,6 +2771,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.104",
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_deferred_table",
+ "rust_decimal",
+ "rust_decimal_macros",
 ]
 
 [[package]]
