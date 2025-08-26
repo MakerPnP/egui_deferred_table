@@ -1,7 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{
-    Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Ui, UiBuilder, Vec2,
-};
+use egui::{Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 use log::trace;
 use std::fmt::Display;
@@ -285,6 +283,12 @@ impl<DataSource> DeferredTable<DataSource> {
                                 trace!("rendering headers. grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect.size());
                                 let _response = ui.allocate_rect(cell_clip_rect, Sense::click());
 
+                                let bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+
+                                ui.painter()
+                                    .with_clip_rect(cell_clip_rect)
+                                    .rect_filled(cell_rect, 0.0, bg_color);
+
                                 ui.painter()
                                     .with_clip_rect(cell_clip_rect)
                                     .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
@@ -381,7 +385,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         let bg_color = if response.contains_pointer() {
                                             ui.style().visuals.widgets.hovered.bg_fill
                                         } else {
-                                            ui.style().visuals.panel_fill
+                                            striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.panel_fill)
                                         };
                                         ui.painter()
                                             .with_clip_rect(cell_clip_rect)
@@ -432,6 +436,14 @@ impl<DataSource> DeferredTable<DataSource> {
         // TODO save state to egui memory
 
         (ui.response(), actions)
+    }
+}
+
+fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
+    if row % 2 == 1 {
+        Some(style.visuals.faint_bg_color)
+    } else {
+        None
     }
 }
 
