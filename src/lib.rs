@@ -168,11 +168,6 @@ impl<DataSource> DeferredTable<DataSource> {
             // container for the table and the scroll bars.
             //
 
-
-            //
-            // display a scrollarea on the right
-            //
-
             let total_content_size = Vec2::new(
                 (dimensions.column_count + 1) as f32 * cell_size.x,
                 (dimensions.row_count + 1) as f32 * cell_size.y
