@@ -62,7 +62,7 @@ impl eframe::App for MyApp {
             //       two scroll bars appear, one set for the table itself, one set for this scroll area.
 
             egui::ScrollArea::both()
-                .max_height(400.0)
+                .max_height(200.0)
                 .show(ui, |ui| {
                     // FIXME the table renders on top of this
                     ui.label("content above table, inside scroll area");
@@ -70,6 +70,7 @@ impl eframe::App for MyApp {
                     let data_source = self.data.as_slice();
 
                     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+                        .min_size((400.0, 400.0).into())
                         .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
 
                             builder.header(|header_builder| {

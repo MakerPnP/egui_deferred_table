@@ -13,11 +13,20 @@ pub struct DeferredTable<DataSource> {
     phantom_data: PhantomData<DataSource>,
 }
 
-#[derive(Default)]
 struct DeferredTableParameters {
     default_cell_size: Option<Vec2>,
-    default_origin: Option<CellIndex>,
     zero_based_headers: bool,
+    min_size: Vec2,
+}
+
+impl Default for DeferredTableParameters {
+    fn default() -> Self {
+        Self {
+            default_cell_size: None,
+            zero_based_headers: false,
+            min_size: Vec2::new(400.0,200.0),
+        }
+    }
 }
 
 impl<DataSource> DeferredTable<DataSource> {
@@ -43,6 +52,11 @@ impl<DataSource> DeferredTable<DataSource> {
         self.parameters.zero_based_headers = false;
         self
     }
+    
+    pub fn min_size(mut self, size: Vec2) -> Self {
+        self.parameters.min_size = size;
+        self
+    }
 
     pub fn show(
         &self,
@@ -57,7 +71,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let style = ui.style();
 
-        // TODO load from egui memory
         let mut state = DeferredTableState {
             cell_size: self.parameters.default_cell_size.unwrap_or(
                 (
@@ -68,9 +81,11 @@ impl<DataSource> DeferredTable<DataSource> {
             ),
 
             // TODO use a constant for this
-            min_size: (400.0, 200.0).into(),
+            min_size: self.parameters.min_size,
             ..DeferredTableState::default()
         };
+
+        // TODO override some state from egui memory, e.g. individual column widths
 
         // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
         // each time it's called.
