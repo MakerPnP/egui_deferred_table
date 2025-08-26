@@ -2829,6 +2829,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_deferred_table",
+ "fastrand",
+ "indexmap",
+ "log",
+ "names",
+ "rust_decimal",
+ "rust_decimal_macros",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2935,6 +2949,7 @@ dependencies = [
  "names",
  "rust_decimal",
  "rust_decimal_macros",
+ "shared",
 ]
 
 [[package]]

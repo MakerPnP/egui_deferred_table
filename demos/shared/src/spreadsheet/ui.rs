@@ -1,0 +1,38 @@
+use egui::{Response, Ui};
+use log::Level;
+use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
+use crate::spreadsheet::SpreadsheetSource;
+
+pub struct SpreadsheetState {
+    data_source: SpreadsheetSource,
+}
+
+impl Default for SpreadsheetState {
+    fn default() -> Self {
+        Self {
+            data_source: SpreadsheetSource::new(),
+        }
+    }
+}
+
+pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<Action>) {
+    let mut data_source = &mut state.data_source;
+
+    DeferredTable::new(ui.make_persistent_id("table_1"))
+        .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {
+
+            builder.header(|header_builder| {
+
+                let TableDimensions { row_count: _, column_count } = header_builder.current_dimensions();
+
+                for index in 0..column_count {
+                    let column_name = SpreadsheetSource::make_column_name(index);
+                    header_builder
+                        .column(index, column_name);
+                }
+
+                // header_builder.create_group("Group 1", Some([0,1,2]));
+                // header_builder.create_group("Remainder", None);
+            })
+        })
+}

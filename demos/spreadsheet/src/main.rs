@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use egui::ViewportBuilder;
 use egui_deferred_table::{DeferredTable, DeferredTableBuilder, TableDimensions};
 use shared::spreadsheet::SpreadsheetSource;
+use shared::spreadsheet::ui::SpreadsheetState;
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -23,14 +24,14 @@ fn main() -> eframe::Result<()> {
 struct MyApp {
     inspection: bool,
     
-    data: Arc<Mutex<SpreadsheetSource>>,
+    state: Arc<Mutex<SpreadsheetState>>,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             inspection: false,
-            data: Arc::new(Mutex::new(SpreadsheetSource::new())),
+            state: Arc::new(Mutex::new(SpreadsheetState::default())),
         }
     }
 }
@@ -51,25 +52,10 @@ impl eframe::App for MyApp {
             egui::ScrollArea::both()
                 .show(ui, |ui| {
 
-                    let mut data_source = self.data.lock().unwrap();
-                    
-                    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-                        .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {
-                            
-                            builder.header(|header_builder| {
-                                
-                                let TableDimensions { row_count: _, column_count } = header_builder.current_dimensions();
+                    let mut state_lock = self.state.lock();
+                    let state = state_lock.as_mut().unwrap();
 
-                                for index in 0..column_count {
-                                    let column_name = SpreadsheetSource::make_column_name(index);
-                                    header_builder
-                                        .column(index, column_name);
-                                }
-
-                                // header_builder.create_group("Group 1", Some([0,1,2]));
-                                // header_builder.create_group("Remainder", None);
-                            })
-                        });
+                    let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
                     
                     for action in actions {
                         println!("{:?}", action);
@@ -79,7 +65,6 @@ impl eframe::App for MyApp {
             
             ui.separator();
             ui.label("content below");
-            
         });
 
 

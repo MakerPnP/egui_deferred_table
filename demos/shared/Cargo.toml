@@ -6,8 +6,18 @@ edition = "2024"
 [dependencies]
 egui_deferred_table = { path = "../.." }
 
-egui = "0.32.0"
+egui = "0.32.1"
 
 # data types
 rust_decimal = "1.37"
 rust_decimal_macros = "1.37"
+
+# data storage
+indexmap = "2.10.0"
+
+# data generation
+fastrand = "2"
+names = { version = "0.14", default-features = false }
+
+# logging
+log = "0.4.27"

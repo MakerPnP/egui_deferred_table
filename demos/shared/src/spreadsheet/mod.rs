@@ -3,6 +3,8 @@ use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRende
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
+pub mod ui;
+
 pub struct SpreadsheetSource {
     data: Vec<Vec<Value>>,
 }

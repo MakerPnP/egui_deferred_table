@@ -6,8 +6,9 @@ use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
-use shared::spreadsheet::SpreadsheetSource;
+use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use shared::sparse::ui::SparseTableState;
+use shared::spreadsheet::ui::SpreadsheetState;
 use crate::futurama::{Kind, RowType};
 
 mod futurama;
@@ -50,6 +51,7 @@ impl Default for MyApp {
         let mut log_entries = vec![];
 
         let mut tree = DockState::new(vec![
+            Tab { name: "Sparse Table", kind: TabKind::SparseTable { state: Arc::new(Mutex::new(SparseTableState::default())) } },
             Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: Arc::new(Mutex::new(SpreadsheetState::default()))}   },
         ]);
 
@@ -66,8 +68,7 @@ impl Default for MyApp {
             ]);
         let _ = tree
             .add_window( vec![
-                Tab { name: "Tables in an initially floating dock window", kind: TabKind::SimpleTable { state: Arc::new(Mutex::new(SimpleTableState::default())) } },
-                Tab { name: "Example Table", kind: TabKind::TableInsideScrollArea { state: Arc::new(Mutex::new(InsideScrollAreaState::default()))} },
+                Tab { name: "Simple (initially floating)", kind: TabKind::SimpleTable { state: Arc::new(Mutex::new(SimpleTableState::default()))} },
             ]);
 
         example_log(&mut log_entries, Level::Info, "Demo started".into());
@@ -125,6 +126,7 @@ enum TabKind {
     TableInsideScrollArea { state: Arc<Mutex<InsideScrollAreaState>> },
     SimpleTable { state: Arc<Mutex<SimpleTableState>> },
     Spreadsheet { state: Arc<Mutex<SpreadsheetState>> },
+    SparseTable { state: Arc<Mutex<SparseTableState>> },
     Log { state: Arc<Mutex<LogState>> },
 }
 
@@ -139,6 +141,9 @@ impl TabKind {
             }
             TabKind::Spreadsheet { state } => {
                 contents_spreadsheet(ui, context, state.lock().as_mut().unwrap());
+            }
+            TabKind::SparseTable { state } => {
+                contents_sparse_table(ui, context, state.lock().as_mut().unwrap());
             }
             TabKind::Log { state } => {
                 contents_log(ui, context, state.lock().as_mut().unwrap());
@@ -274,27 +279,7 @@ pub struct LogState {
 
 fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
 
-
-    let mut data_source = &mut state.data_source;
-
-    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-        .show(ui, &mut *data_source, |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {
-
-            builder.header(|header_builder| {
-
-                let TableDimensions { row_count: _, column_count } = header_builder.current_dimensions();
-
-                for index in 0..column_count {
-                    let column_name = SpreadsheetSource::make_column_name(index);
-                    header_builder
-                        .column(index, column_name);
-                }
-
-                // header_builder.create_group("Group 1", Some([0,1,2]));
-                // header_builder.create_group("Remainder", None);
-            })
-        });
-
+    let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
 
     for action in actions {
         match action {
@@ -305,16 +290,11 @@ fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut Sprea
     }
 }
 
+fn contents_sparse_table(ui: &mut Ui, _context: &mut TabContext, state: &mut SparseTableState) {
 
-pub struct SpreadsheetState {
-    data_source: SpreadsheetSource,
-}
+    shared::sparse::ui::show_controls(ui, state);
 
+    let (_response, actions) = shared::sparse::ui::show_table(ui, state);
 
-impl Default for SpreadsheetState {
-    fn default() -> Self {
-        Self {
-            data_source: SpreadsheetSource::new(),
-        }
-    }
+    shared::sparse::ui::handle_actions(actions, state);
 }
