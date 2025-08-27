@@ -1,7 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{
-    Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui, UiBuilder, Vec2,
-};
+use egui::{Color32, Context, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 use log::trace;
 use std::fmt::Display;
@@ -69,27 +67,24 @@ impl<DataSource> DeferredTable<DataSource> {
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
         trace!("table");
+        let ctx = ui.ctx();
+        let style = ui.style();
 
         let mut actions = vec![];
 
-        let style = ui.style();
+        let cell_size: Vec2 = self.parameters.default_cell_size.unwrap_or(
+            (
+                style.spacing.interact_size.x + (style.spacing.item_spacing.x * 2.0),
+                style.spacing.interact_size.y + (style.spacing.item_spacing.y * 2.0),
+            )
+                .into()
+        );
 
-        let mut state = DeferredTableState {
-            cell_size: self.parameters.default_cell_size.unwrap_or(
-                (
-                    style.spacing.interact_size.x + (style.spacing.item_spacing.x * 2.0),
-                    style.spacing.interact_size.y + (style.spacing.item_spacing.y * 2.0),
-                )
-                    .into(),
-            ),
+        let temp_state_id = self.id.with("temp_state");
+        let mut temp_state = DeferredTableTempState::load_or_default(ctx, temp_state_id);
 
-            min_size: self.parameters.min_size,
-
-
-            ..DeferredTableState::default()
-        };
-
-        // TODO override some state from egui memory, e.g. individual column widths
+        let persistent_state_id = self.id.with("persistent_state");
+        let mut state = DeferredTablePersistentState::load_or_default(ctx, persistent_state_id);
 
         // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
         // each time it's called.
@@ -98,20 +93,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let mut source_state = SourceState { dimensions };
 
-        let available_rect_before_wrap = ui.available_rect_before_wrap();
-        if false {
-            ui.painter()
-                .debug_rect(available_rect_before_wrap, Color32::WHITE, "arbr");
-        }
-
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
-        if false {
-            ui.painter()
-                .debug_rect(parent_max_rect, Color32::GREEN, "pmr");
-            ui.painter()
-                .debug_rect(parent_clip_rect, Color32::RED, "pcr");
-        }
 
         // the x/y of this can have negative values if the OUTER scroll area is scrolled right or down, respectively.
         // i.e. if the outer scroll area scrolled down, the y will be negative, above the visible area.
@@ -123,14 +106,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
         // if there is content above the table, we use this min rect so we to define an area starting at the right place.
         let outer_min_rect =
-            Rect::from_min_size(outer_next_widget_position, state.min_size.clone());
+            Rect::from_min_size(outer_next_widget_position, self.parameters.min_size.clone());
         // FIXME if the parent_max_rect is too small, min_size is not respected, but using
-        //       ... `parent_max_rect.size().at_least(state.min_size)` causes rendering errors
+        //       ... `parent_max_rect.size().at_least(self.parameters.min_size)` causes rendering errors
         let outer_max_rect =
             Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
         trace!("outer_min_rect: {:?}", outer_min_rect);
         trace!("outer_max_rect: {:?}", outer_max_rect);
-
 
         if false {
             ui.painter()
@@ -138,20 +120,13 @@ impl<DataSource> DeferredTable<DataSource> {
             ui.painter()
                 .debug_rect(outer_max_rect, Color32::RED, "omxr");
         }
+
         ui.scope_builder(UiBuilder::new().max_rect(outer_max_rect), |ui|{
 
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
 
             let inner_clip_rect = ui.clip_rect();
             let inner_max_rect = ui.max_rect();
-
-            let cell_size = state.cell_size.clone();
-
-            let y_size = inner_max_rect.size().y;
-            let x_size = inner_max_rect.size().x;
-            let possible_rows = (y_size / cell_size.y).ceil() as usize;
-            let possible_columns = (x_size / cell_size.x).ceil() as usize;
-            trace!("possible_rows: {}, possible_columns: {}", possible_rows, possible_columns);
 
             let y_size = inner_clip_rect.size().y;
             let x_size = inner_clip_rect.size().x;
@@ -445,7 +420,8 @@ impl<DataSource> DeferredTable<DataSource> {
             });
         });
 
-        // TODO save state to egui memory
+        DeferredTablePersistentState::store(ui.ctx(), persistent_state_id, state);
+        DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
     }
@@ -496,13 +472,48 @@ impl From<(usize, usize)> for TableDimensions {
     }
 }
 
-#[derive(Default)]
-struct DeferredTableState {
-    min_size: Vec2,
-    cell_size: Vec2,
+/// State that could be stored between application restarts
+#[derive(Default, Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
+struct DeferredTablePersistentState {
     // TODO column ordering
     // TODO column visibility
-    // TODO cell selection
+    // TODO cursor/focus position
+    // TODO cell selection (multi-select)
+    column_widths: Vec<f32>,
+}
+
+impl DeferredTablePersistentState {
+    pub fn load_or_default(ctx: &Context, id: Id) -> Self {
+        ctx.data_mut(|d| {
+            d.get_persisted::<DeferredTablePersistentState>(id)
+                .unwrap_or(DeferredTablePersistentState::default())
+        })
+    }
+
+    pub fn store(ctx: &Context, id: Id, instance: Self) {
+        ctx.data_mut(|d| d.insert_persisted(id, instance));
+    }
+}
+
+/// State that should not be persisted between application restarts
+#[derive(Default, Clone)]
+struct DeferredTableTempState {
+    /// holds the index of the top-left cell
+    cell_origin: CellIndex,
+}
+
+impl DeferredTableTempState {
+    pub fn load_or_default(ctx: &Context, id: Id) -> Self {
+        ctx.data_mut(|d| {
+            d.get_temp::<DeferredTableTempState>(id)
+                .unwrap_or(DeferredTableTempState::default())
+        })
+    }
+
+    pub fn store(ctx: &Context, id: Id, instance: Self) {
+        ctx.data_mut(|d| d.insert_temp(id, instance));
+    }
 }
 
 pub trait DeferredTableDataSource {
@@ -516,7 +527,7 @@ pub trait DeferredTableRenderer {
 pub struct DeferredTableBuilder<'a, DataSource> {
     table: Table,
 
-    state: &'a mut DeferredTableState,
+    state: &'a mut DeferredTablePersistentState,
     source_state: &'a mut SourceState,
 
     data_source: &'a DataSource,
@@ -542,7 +553,7 @@ struct Table {
 
 impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
     fn new(
-        state: &'a mut DeferredTableState,
+        state: &'a mut DeferredTablePersistentState,
         source_state: &'a mut SourceState,
         data_source: &'a DataSource,
     ) -> Self
@@ -574,7 +585,7 @@ struct SourceState {
 
 pub struct HeaderBuilder<'a, DataSource> {
     table: &'a mut Table,
-    state: &'a mut DeferredTableState,
+    state: &'a mut DeferredTablePersistentState,
     source_state: &'a mut SourceState,
     data_source: &'a DataSource,
 }
@@ -582,7 +593,7 @@ pub struct HeaderBuilder<'a, DataSource> {
 impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
     fn new(
         table: &'a mut Table,
-        state: &'a mut DeferredTableState,
+        state: &'a mut DeferredTablePersistentState,
         source_state: &'a mut SourceState,
         data_source: &'a DataSource,
     ) -> Self {
