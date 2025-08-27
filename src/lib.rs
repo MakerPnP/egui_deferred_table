@@ -24,6 +24,7 @@ impl Default for DeferredTableParameters {
         Self {
             default_cell_size: None,
             zero_based_headers: false,
+            // TODO use a constant for this
             min_size: Vec2::new(400.0, 200.0),
         }
     }
@@ -82,8 +83,9 @@ impl<DataSource> DeferredTable<DataSource> {
                     .into(),
             ),
 
-            // TODO use a constant for this
             min_size: self.parameters.min_size,
+
+
             ..DeferredTableState::default()
         };
 
