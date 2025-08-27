@@ -122,10 +122,13 @@ impl<DataSource> DeferredTable<DataSource> {
         // if there is content above the table, we use this min rect so we to define an area starting at the right place.
         let outer_min_rect =
             Rect::from_min_size(outer_next_widget_position, state.min_size.clone());
+        // FIXME if the parent_max_rect is too small, min_size is not respected, but using
+        //       ... `parent_max_rect.size().at_least(state.min_size)` causes rendering errors
         let outer_max_rect =
             Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
         trace!("outer_min_rect: {:?}", outer_min_rect);
         trace!("outer_max_rect: {:?}", outer_max_rect);
+
 
         if false {
             ui.painter()
