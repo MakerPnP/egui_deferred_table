@@ -7,6 +7,7 @@ use indexmap::IndexMap;
 use log::trace;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::ops::Range;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
@@ -168,13 +169,13 @@ impl<DataSource> DeferredTable<DataSource> {
             }
 
             // XXX - remove this temporary hard-coded value
-            // state.column_widths[10] = 25.0;
+            // // state.column_widths[10] = 25.0;
             // state.column_widths[1] = 25.0;
             // state.column_widths[2] = 200.0;
             // state.column_widths[3] = 25.0;
             // state.column_widths[6] = 200.0;
             // state.column_widths[12] = 200.0;
-            // state.row_heights[10] = 10.0;
+            // // state.row_heights[10] = 10.0;
             // state.row_heights[1] = 10.0;
             // state.row_heights[2] = 100.0;
             // state.row_heights[3] = 10.0;
@@ -224,49 +225,67 @@ impl<DataSource> DeferredTable<DataSource> {
                         trace!("max_rect: {:?}, viewport_rect: {:?}", ui.max_rect(), viewport_rect);
                         //ui.painter().debug_rect(ui.max_rect(), Color32::RED, "mr");
                         let translated_viewport_rect = viewport_rect.translate(ui.max_rect().min.to_vec2());
+                        let cells_viewport_rect = Rect::from_min_max(viewport_rect.min, viewport_rect.max - cell_size);
                         if false {
                             ui.ctx().debug_painter().debug_rect(translated_viewport_rect, Color32::GREEN, "vr");
+                            ui.ctx().debug_painter().debug_rect(cells_viewport_rect.translate(ui.max_rect().min.to_vec2()).translate(cell_size), Color32::RED, "tvr");
                         }
 
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
 
-                        // FIXME the method for guessing does not take into account how the headers are rendered
-                        //       in-place for smooth scrolling, a different approach should be used to properly
-                        //       calculate the rectangle of the drawable cells should then be clipped to the
-                        //       smooth scroll area below/right of the headers.
-                        //       likely the calculation should create a new rect based on the viewport, minus the
-                        //       row/column header areas and use that for calculations.
+                        fn range_and_index_for_offset(offset: f32, values: &[f32]) -> Result<(Range<f32>, usize), ()> {
+                            let mut index = 0;
+                            let mut min = 0.0;
+                            let mut max = 0.0;
+                            loop {
+                                let Some(value) = values.get(index) else {
+                                    if index == 0 {
+                                        // no values at all
+                                        return Err(())
+                                    }
+                                    // no more values, use previous loop iteration values
+                                    break
+                                };
 
-                        let (first_row_index, last_row_index_guess, first_row_top, last_row_bottom) =
-                            get_visible_row_range(&state.row_heights, viewport_rect);
+                                max += value;
 
-                        let (first_column_index, last_column_index_guess, first_column_left, last_column_right) =
-                            get_visible_column_range(&state.column_widths, viewport_rect);
+                                if offset >= min && offset < max {
+                                    break
+                                }
 
-                        trace!("first_row_top: {}, last_row_bottom: {}, first_column_left: {}, last_column_right: {}", first_row_top, last_row_bottom, first_column_left, last_column_right);
+                                min += value;
+                                index += 1;
+                            }
 
-                        let y_min = ui.max_rect().top() + first_row_top;
-                        let y_max = ui.max_rect().top() + last_row_bottom;
-                        let x_min = ui.max_rect().left() + first_column_left;
-                        let x_max = ui.max_rect().left() + last_column_right;
-                        trace!("x_min: {}, x_max: {}, y_min: {}, y_max: {}", x_min, x_max, y_min, y_max);
-
-
-                        let rect = Rect::from_x_y_ranges(x_min..=x_max, y_min..=y_max);
-                        trace!("rect: {:?}", rect);
-                        if false {
-                            ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "table");
+                            Ok((min..max, index))
                         }
 
-                        trace!("first_row_index: {}, last_row_index: {}, first_column_index: {}, last_column_index: {}", first_row_index, last_row_index_guess, first_column_index, last_column_index_guess);
+                        // use the cells_viewport_rect for upper left and origin calculation
+                        let (first_column, cells_first_column_index) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths).unwrap();
+                        let (first_row, cells_first_row_index) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights).unwrap();
+
+                        // use the total viewport (including header area) to find
+                        let (last_column, cells_last_column_index) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths).unwrap();
+                        let (last_row, cells_last_row_index) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights).unwrap();
+
+                        let rect = Rect::from_min_max((first_column.start, first_row.start).into(), (last_column.end, last_row.end).into())
+                            .translate(ui.max_rect().min.to_vec2());
+
+                        trace!("rect: {:?}", rect);
+                        if false {
+                            ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "rect");
+                        }
+
+                        trace!("cells_first_row_index: {}, cells_last_row_index: {}, cells_first_column_index: {}, cells_last_column_index: {}", cells_first_row_index, cells_last_row_index, cells_first_column_index, cells_last_column_index);
 
                         let cell_origin = CellIndex {
-                            row: first_row_index,
-                            column: first_column_index,
+                            row: cells_first_row_index,
+                            column: cells_first_column_index,
                         };
                         trace!("cell_origin: {:?}", cell_origin);
                         temp_state.cell_origin = cell_origin;
+
 
                         trace!("headers");
                         let mut accumulated_row_heights = 0.0;
@@ -400,7 +419,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         trace!("cells");
 
-                        let clip_rect = Rect::from_min_size(table_max_rect.min + cell_size, rect.size()).intersect(table_max_rect);
+                        let clip_rect = Rect::from_min_max(table_max_rect.min + cell_size, translated_viewport_rect.max);
                         if false {
                             ui.painter().debug_rect(clip_rect, Color32::CYAN, "cr");
                         }
@@ -456,7 +475,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     accumulated_column_widths += column_width;
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), (column_width, row_height).into());
-                                    let cell_clip_rect = cell_rect.intersect(clip_rect).intersect(translated_viewport_rect);
+                                    let cell_clip_rect = cell_rect.intersect(clip_rect);
                                     let cell_clip_rect_size = cell_clip_rect.size();
                                     let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
@@ -520,87 +539,6 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     } else {
         None
     }
-}
-
-fn get_visible_row_range(row_heights: &[f32], viewport_rect: Rect) -> (usize, usize, f32, f32) {
-    let mut first_row_top = 0.0;
-    let mut first_row_bottom = 0.0;
-    let mut first_row_index = 0;
-    loop {
-        let Some(row_height) = row_heights.get(first_row_index) else {
-            break;
-        };
-        first_row_bottom += row_height;
-        if first_row_bottom > viewport_rect.min.y {
-            break;
-        }
-        first_row_index += 1;
-        first_row_top += row_height;
-    }
-
-    let mut last_row_top = first_row_top;
-    let mut last_row_bottom = first_row_bottom;
-    let mut last_row_index_guess = first_row_index;
-    loop {
-        let Some(row_height) = row_heights.get(last_row_index_guess) else {
-            break;
-        };
-        if last_row_bottom > viewport_rect.max.y {
-            break;
-        }
-        last_row_index_guess += 1;
-        last_row_top += row_height;
-        last_row_bottom += row_height;
-    }
-
-    (
-        first_row_index,
-        last_row_index_guess,
-        first_row_top,
-        last_row_bottom,
-    )
-}
-
-fn get_visible_column_range(
-    column_widths: &[f32],
-    viewport_rect: Rect,
-) -> (usize, usize, f32, f32) {
-    let mut first_column_left = 0.0;
-    let mut first_column_right = 0.0;
-    let mut first_column_index = 0;
-    loop {
-        let Some(column_width) = column_widths.get(first_column_index) else {
-            break;
-        };
-        first_column_right += column_width;
-        if first_column_right > viewport_rect.min.x {
-            break;
-        }
-        first_column_index += 1;
-        first_column_left += column_width;
-    }
-
-    let mut _last_column_left = first_column_left;
-    let mut last_column_right = first_column_right;
-    let mut last_column_index_guess = first_column_index;
-    loop {
-        let Some(&column_width) = column_widths.get(last_column_index_guess) else {
-            break;
-        };
-        if last_column_right > viewport_rect.max.x {
-            break;
-        }
-        last_column_index_guess += 1;
-        _last_column_left += column_width;
-        last_column_right += column_width;
-    }
-
-    (
-        first_column_index,
-        last_column_index_guess,
-        first_column_left,
-        last_column_right,
-    )
 }
 
 #[derive(Clone, Debug)]
