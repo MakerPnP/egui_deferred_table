@@ -294,7 +294,11 @@ impl<DataSource> DeferredTable<DataSource> {
                         let visible_column_count = cells_last_column_index - cells_first_column_index + 1;
 
 
+                        let mut table_width = 0.0;
+                        let mut table_height = 0.0;
+
                         trace!("headers");
+                        let header_row_bg_color = ui.style().visuals.widgets.inactive.bg_fill.gamma_multiply(0.5);
                         let mut accumulated_row_heights = 0.0;
                         for grid_row_index in 0..=visible_row_count {
                             if grid_row_index + cell_origin.row > dimensions.row_count {
@@ -302,6 +306,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             }
 
                             let row_number = grid_row_index + cell_origin.row;
+                            let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
                             let row_height = if grid_row_index > 0 {
                                 state.row_heights[row_number - 1]
@@ -365,7 +370,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let cell_clip_rect_size = cell_clip_rect.size();
                                 let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
-                                trace!("grid: r={}, c={}, cell_rect: {:?}, cell_clip_rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_rect, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
+                                trace!("grid: rn={}, r={}, c={}, cell_rect: {:?}, cell_clip_rect: {:?}, pos: {:?}, size: {:?}, skip: {}", row_number, grid_row_index, grid_column_index, cell_rect, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
                                 if skip {
                                     continue;
@@ -373,7 +378,11 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let _response = ui.allocate_rect(cell_clip_rect, Sense::click());
 
-                                let bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+                                let bg_color = if grid_row_index == 0 {
+                                    header_row_bg_color
+                                } else {
+                                    row_bg_color
+                                };
 
                                 ui.painter()
                                     .with_clip_rect(cell_clip_rect)
@@ -411,6 +420,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                         cell_ui.label(row_number.to_string());
                                     }
                                 }
+
+                                if grid_row_index == 0 {
+                                    table_width += cell_clip_rect.size().x;
+                                }
+                                if grid_column_index == 0 {
+                                    table_height += cell_clip_rect.size().y;
+                                }
                             }
                             accumulated_row_heights += row_height;
                         }
@@ -436,15 +452,14 @@ impl<DataSource> DeferredTable<DataSource> {
 
                             // start with an offset equal to header height, which is currently using the cell_size
                             let mut accumulated_row_heights = cell_size.y;
-                            let mut cells_done = false;
                             for grid_row_index in 1..=visible_row_count {
                                 if grid_row_index + cell_origin.row > dimensions.row_count {
                                     break
                                 }
 
                                 let row_number = grid_row_index + cell_origin.row;
-
                                 let row_height = state.row_heights[row_number - 1];
+                                let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
 
                                 let y = start_pos.y + accumulated_row_heights;
 
@@ -485,8 +500,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let bg_color = if response.contains_pointer() {
                                         ui.style().visuals.widgets.hovered.bg_fill
                                     } else {
-                                        striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.panel_fill)
+                                        row_bg_color
                                     };
+
                                     ui.painter()
                                         .with_clip_rect(cell_clip_rect)
                                         .rect_filled(cell_rect, 0.0, bg_color);
@@ -511,6 +527,15 @@ impl<DataSource> DeferredTable<DataSource> {
                                 accumulated_row_heights += row_height;
                             }
                         });
+
+                        let line_stroke = ui.style().visuals.widgets.inactive.fg_stroke;
+                        ui.painter()
+                            .with_clip_rect(inner_max_rect)
+                            .hline( table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + cell_size.y, line_stroke);
+
+                        ui.painter()
+                            .with_clip_rect(inner_max_rect)
+                            .vline( table_max_rect.min.x + cell_size.x, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
                     });
             });
         });
