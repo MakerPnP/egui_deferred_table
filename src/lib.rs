@@ -265,15 +265,17 @@ impl<DataSource> DeferredTable<DataSource> {
                         let (first_column, cells_first_column_index) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths).unwrap();
                         let (first_row, cells_first_row_index) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights).unwrap();
 
-                        // use the total viewport (including header area) to find
+                        // use the total viewport (including header area) to find the last column and row
                         let (last_column, cells_last_column_index) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths).unwrap();
                         let (last_row, cells_last_row_index) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights).unwrap();
 
+                        // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
+                        // are outside of this rect
                         let rect = Rect::from_min_max((first_column.start, first_row.start).into(), (last_column.end, last_row.end).into())
                             .translate(ui.max_rect().min.to_vec2());
 
                         trace!("rect: {:?}", rect);
-                        if false {
+                        if true {
                             ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "rect");
                         }
 
@@ -419,9 +421,9 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         trace!("cells");
 
-                        let clip_rect = Rect::from_min_max(table_max_rect.min + cell_size, translated_viewport_rect.max);
+                        let cells_clip_rect = Rect::from_min_max(table_max_rect.min + cell_size, translated_viewport_rect.max).intersect(parent_clip_rect);
                         if false {
-                            ui.painter().debug_rect(clip_rect, Color32::CYAN, "cr");
+                            ui.painter().debug_rect(cells_clip_rect, Color32::CYAN, "cr");
                         }
 
                         ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
@@ -475,7 +477,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     accumulated_column_widths += column_width;
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), (column_width, row_height).into());
-                                    let cell_clip_rect = cell_rect.intersect(clip_rect);
+                                    let cell_clip_rect = cell_rect.intersect(cells_clip_rect);
                                     let cell_clip_rect_size = cell_clip_rect.size();
                                     let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
