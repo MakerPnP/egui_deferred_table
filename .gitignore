@@ -1,2 +1,5 @@
-/target
+target/
 /demos/simple/target/
+
+.idea/
+.vscode/
