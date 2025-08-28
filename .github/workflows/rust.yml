@@ -20,17 +20,18 @@ jobs:
       run: sudo apt-get install -y libdbus-1-3 libdbus-1-dev
     - name: Build
       run: cargo build --verbose
-    - name: Run tests (no-default-features)
-      run: cargo test --verbose --no-default-features
     - name: Run tests
-      run: cargo test --verbose
-    - name: Run tests (all features)
-      run: cargo test --verbose --all-features
-    - name: Run shared tests
-      run: cd demos/shared && cargo test --verbose
-    - name: Run demo tests (docking)
-      run: cd demos/docking && cargo test --verbose
-    - name: Run demo tests (sparse)
-      run: cd demos/sparse && cargo test --verbose
-    - name: Run demo tests (spreadsheet)
-      run: cd demos/spreadsheet && cargo test --verbose
+      run: |
+        cargo test --verbose --no-default-features
+        cargo test --verbose
+        cargo test --verbose --all-features
+    - name: Run demo tests
+      run: |
+        cd demos/shared && cargo test --verbose
+        cd ../..
+        cd demos/docking && cargo test --verbose
+        cd ../.. 
+        cd demos/sparse && cargo test --verbose
+        cd ../..
+        cd demos/spreadsheet && cargo test --verbose
+        cd ../..
