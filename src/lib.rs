@@ -7,7 +7,6 @@ use indexmap::IndexMap;
 use log::trace;
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::ops::ControlFlow;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
@@ -240,10 +239,10 @@ impl<DataSource> DeferredTable<DataSource> {
                         //       row/column header areas and use that for calculations.
 
                         let (first_row_index, last_row_index_guess, first_row_top, last_row_bottom) =
-                            get_visible_row_range(&state.row_heights, viewport_rect, cell_size);
+                            get_visible_row_range(&state.row_heights, viewport_rect);
 
                         let (first_column_index, last_column_index_guess, first_column_left, last_column_right) =
-                            get_visible_column_range(&state.column_widths, viewport_rect, cell_size);
+                            get_visible_column_range(&state.column_widths, viewport_rect);
 
                         trace!("first_row_top: {}, last_row_bottom: {}, first_column_left: {}, last_column_right: {}", first_row_top, last_row_bottom, first_column_left, last_column_right);
 
@@ -523,11 +522,7 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     }
 }
 
-fn get_visible_row_range(
-    row_heights: &[f32],
-    viewport_rect: Rect,
-    cell_size: Vec2,
-) -> (usize, usize, f32, f32) {
+fn get_visible_row_range(row_heights: &[f32], viewport_rect: Rect) -> (usize, usize, f32, f32) {
     let mut first_row_top = 0.0;
     let mut first_row_bottom = 0.0;
     let mut first_row_index = 0;
@@ -569,7 +564,6 @@ fn get_visible_row_range(
 fn get_visible_column_range(
     column_widths: &[f32],
     viewport_rect: Rect,
-    cell_size: Vec2,
 ) -> (usize, usize, f32, f32) {
     let mut first_column_left = 0.0;
     let mut first_column_right = 0.0;
@@ -586,7 +580,7 @@ fn get_visible_column_range(
         first_column_left += column_width;
     }
 
-    let mut last_column_left = first_column_left;
+    let mut _last_column_left = first_column_left;
     let mut last_column_right = first_column_right;
     let mut last_column_index_guess = first_column_index;
     loop {
@@ -597,7 +591,7 @@ fn get_visible_column_range(
             break;
         }
         last_column_index_guess += 1;
-        last_column_left += column_width;
+        _last_column_left += column_width;
         last_column_right += column_width;
     }
 
