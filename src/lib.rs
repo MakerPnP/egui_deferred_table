@@ -275,7 +275,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             .translate(ui.max_rect().min.to_vec2());
 
                         trace!("rect: {:?}", rect);
-                        if true {
+                        if false {
                             ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "rect");
                         }
 
