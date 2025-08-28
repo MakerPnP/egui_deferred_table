@@ -9,6 +9,8 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::ops::Range;
 
+const SHOW_CELL_BORDERS: bool = false;
+
 pub struct DeferredTable<DataSource> {
     id: Id,
     parameters: DeferredTableParameters,
@@ -377,9 +379,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                     .with_clip_rect(cell_clip_rect)
                                     .rect_filled(cell_rect, 0.0, bg_color);
 
-                                ui.painter()
-                                    .with_clip_rect(cell_clip_rect)
-                                    .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                if SHOW_CELL_BORDERS {
+                                    ui.painter()
+                                        .with_clip_rect(cell_clip_rect)
+                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                }
 
                                 let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
                                 cell_ui.set_clip_rect(cell_clip_rect);
@@ -492,10 +496,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                         actions.push(Action::CellClicked(cell_index));
                                     }
 
-
-                                    ui.painter()
-                                        .with_clip_rect(cell_clip_rect)
-                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                    if SHOW_CELL_BORDERS {
+                                        ui.painter()
+                                            .with_clip_rect(cell_clip_rect)
+                                            .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                    }
 
                                     let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_rect));
                                     cell_ui.set_clip_rect(cell_clip_rect);
