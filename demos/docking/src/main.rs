@@ -223,14 +223,18 @@ pub struct InsideScrollAreaState {
 
 fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut SimpleTableState) {
 
+    const FIELD_WIDTHS: [f32; 8] = [100.0, 80.0, 100.0, 400.0, 125.0, 100.0, 100.0, 80.0];
+
     let data_source = context.data.as_slice();
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
         .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
             builder.header(|header_builder| {
-                for (index, field) in futurama::fields().iter().enumerate() {
+
+                for (index, (field, width)) in futurama::fields().iter().zip(FIELD_WIDTHS).enumerate() {
                     header_builder
-                        .column(index, field.to_string());
+                        .column(index, field.to_string())
+                        .default_width(width);
                 }
             })
         });
