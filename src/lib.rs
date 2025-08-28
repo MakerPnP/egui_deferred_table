@@ -70,7 +70,6 @@ impl<DataSource> DeferredTable<DataSource> {
     where
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
-        trace!("table");
         let ctx = ui.ctx();
         let style = ui.style();
 
@@ -148,8 +147,7 @@ impl<DataSource> DeferredTable<DataSource> {
         //       ... `parent_max_rect.size().at_least(self.parameters.min_size)` causes rendering errors
         let outer_max_rect =
             Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
-        trace!("outer_min_rect: {:?}", outer_min_rect);
-        trace!("outer_max_rect: {:?}", outer_max_rect);
+        trace!("outer_min_rect: {:?}, outer_max_rect: {:?}", outer_min_rect, outer_max_rect);
 
         if false {
             ui.painter()
@@ -215,9 +213,8 @@ impl<DataSource> DeferredTable<DataSource> {
                     .id_salt("table_scroll_area")
                     .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                     .show_viewport(ui, |ui, viewport_rect| {
-                        trace!("max_rect: {:?}", ui.max_rect());
+                        trace!("max_rect: {:?}, viewport_rect: {:?}", ui.max_rect(), viewport_rect);
                         //ui.painter().debug_rect(ui.max_rect(), Color32::RED, "mr");
-                        trace!("viewport_rect: {:?}", viewport_rect);
                         let translated_viewport_rect = viewport_rect.translate(ui.max_rect().min.to_vec2());
                         if false {
                             ui.ctx().debug_painter().debug_rect(translated_viewport_rect, Color32::GREEN, "vr");
@@ -239,16 +236,14 @@ impl<DataSource> DeferredTable<DataSource> {
                         let (first_column_index, last_column_index_guess, first_column_left, last_column_right) =
                             get_visible_column_range(&state.column_widths, viewport_rect, cell_size);
 
-                        trace!("first_row_top: {}, last_row_bottom: {}, ", first_row_top, last_row_bottom);
-                        trace!("first_column_left: {}, last_column_right: {}, ", first_column_left, last_column_right);
+                        trace!("first_row_top: {}, last_row_bottom: {}, first_column_left: {}, last_column_right: {}", first_row_top, last_row_bottom, first_column_left, last_column_right);
 
                         let y_min = ui.max_rect().top() + first_row_top;
                         let y_max = ui.max_rect().top() + last_row_bottom;
-                        trace!("y_min: {}, y_max: {}", y_min, y_max);
-
                         let x_min = ui.max_rect().left() + first_column_left;
                         let x_max = ui.max_rect().left() + last_column_right;
-                        trace!("x_min: {}, x_max: {}", x_min, x_max);
+                        trace!("x_min: {}, x_max: {}, y_min: {}, y_max: {}", x_min, x_max, y_min, y_max);
+
 
                         let rect = Rect::from_x_y_ranges(x_min..=x_max, y_min..=y_max);
                         trace!("rect: {:?}", rect);
@@ -256,8 +251,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "table");
                         }
 
-                        trace!("first_row_index: {}, last_row_index: {}", first_row_index, last_row_index_guess);
-                        trace!("first_column_index: {}, last_column_index: {}, ", first_column_index, last_column_index_guess);
+                        trace!("first_row_index: {}, last_row_index: {}, first_column_index: {}, last_column_index: {}", first_row_index, last_row_index_guess, first_column_index, last_column_index_guess);
 
                         let cell_origin = CellIndex {
                             row: first_row_index,
@@ -306,12 +300,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 };
 
                                 let column_width = if grid_column_index > 0 {
-                                    let column_width = state.column_widths[column_number - 1];
-                                    trace!("column width from state: {}", column_width);
-                                    column_width
+                                    state.column_widths[column_number - 1]
                                 } else {
-                                    let column_width = cell_size.x;
-                                    trace!("column width from cell size: {}", column_width);
                                     cell_size.x
                                 };
 
@@ -343,11 +333,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 let cell_clip_rect_size = cell_clip_rect.size();
-                                trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size);
+                                let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
-                                if cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0 {
-                                    trace!("skipping non-visible/zero-sized");
+                                trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
+                                if skip {
                                     // if this is the first column, then none of this row can be rendered, so we're done
                                     if first_on_row {
                                         headers_done = true;
@@ -460,11 +450,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), (column_width, row_height).into());
                                     let cell_clip_rect = cell_rect.intersect(clip_rect).intersect(translated_viewport_rect);
                                     let cell_clip_rect_size = cell_clip_rect.size();
-                                    trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size);
+                                    let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
-                                    if cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0 {
-                                        trace!("skipping non-visible/zero-sized");
+                                    trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
+                                    if skip {
                                         // if this is the first column, then none of this row can be rendered, so we're done
                                         if first_on_row {
                                             cells_done = true;
