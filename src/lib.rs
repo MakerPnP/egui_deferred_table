@@ -288,12 +288,13 @@ impl<DataSource> DeferredTable<DataSource> {
                         trace!("cell_origin: {:?}", cell_origin);
                         temp_state.cell_origin = cell_origin;
 
+                        let visible_row_count = cells_last_row_index - cells_first_row_index + 1;
+                        let visible_column_count = cells_last_column_index - cells_first_column_index + 1;
+
 
                         trace!("headers");
                         let mut accumulated_row_heights = 0.0;
-                        let mut grid_row_index = 0;
-                        let mut headers_done = false;
-                        while !headers_done {
+                        for grid_row_index in 0..=visible_row_count {
                             if grid_row_index + cell_origin.row > dimensions.row_count {
                                 break
                             }
@@ -308,9 +309,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                             let mut accumulated_column_widths = 0.0;
 
-                            let mut grid_column_index = 0;
-                            let mut first_on_row = true;
-                            loop {
+                            for grid_column_index in 0..=visible_column_count {
                                 let column_number = grid_column_index + cell_origin.column;
 
                                 if grid_row_index >= 1 && grid_column_index >= 1 {
@@ -364,14 +363,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let cell_clip_rect_size = cell_clip_rect.size();
                                 let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
-                                trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
+                                trace!("grid: r={}, c={}, cell_rect: {:?}, cell_clip_rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_rect, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
                                 if skip {
-                                    // if this is the first column, then none of this row can be rendered, so we're done
-                                    if first_on_row {
-                                        headers_done = true;
-                                    }
-                                    break;
+                                    continue;
                                 }
 
                                 let _response = ui.allocate_rect(cell_clip_rect, Sense::click());
@@ -412,10 +407,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         cell_ui.label(row_number.to_string());
                                     }
                                 }
-                                grid_column_index += 1;
-                                first_on_row = false;
                             }
-                            grid_row_index += 1;
                             accumulated_row_heights += row_height;
                         }
 
@@ -441,8 +433,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             // start with an offset equal to header height, which is currently using the cell_size
                             let mut accumulated_row_heights = cell_size.y;
                             let mut cells_done = false;
-                            let mut grid_row_index = 1;
-                            while !cells_done {
+                            for grid_row_index in 1..=visible_row_count {
                                 if grid_row_index + cell_origin.row > dimensions.row_count {
                                     break
                                 }
@@ -456,9 +447,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 // start with an offset equal to header width, which is currently using the cell_size
                                 let mut accumulated_column_widths = cell_size.x;
 
-                                let mut grid_column_index = 1;
-                                let mut first_on_row = true;
-                                loop {
+                                for grid_column_index in 1..=visible_column_count {
                                     if grid_column_index + cell_origin.column > dimensions.column_count {
                                         break
                                     }
@@ -484,11 +473,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     trace!("grid: r={}, c={}, rect: {:?}, pos: {:?}, size: {:?}, skip: {}", grid_row_index, grid_column_index, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
                                     if skip {
-                                        // if this is the first column, then none of this row can be rendered, so we're done
-                                        if first_on_row {
-                                            cells_done = true;
-                                        }
-                                        break;
+                                        continue;
                                     }
 
                                     let response = ui.allocate_rect(cell_clip_rect, Sense::click());
@@ -517,10 +502,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                     data_source.render_cell(&mut cell_ui, cell_index);
-                                    grid_column_index += 1;
-                                    first_on_row = false;
                                 }
-                                grid_row_index += 1;
                                 accumulated_row_heights += row_height;
                             }
                         });
