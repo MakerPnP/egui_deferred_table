@@ -66,7 +66,7 @@ impl<DataSource> DeferredTable<DataSource> {
     pub fn show(
         &self,
         ui: &mut Ui,
-        data_source: &DataSource,
+        data_source: &mut DataSource,
         build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
     ) -> (Response, Vec<Action>)
     where
@@ -642,7 +642,7 @@ pub trait DeferredTableDataSource {
 }
 
 pub trait DeferredTableRenderer {
-    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex);
+    fn render_cell(&mut self, ui: &mut Ui, cell_index: CellIndex);
 }
 
 pub struct DeferredTableBuilder<'a, DataSource> {
@@ -762,7 +762,7 @@ macro_rules! impl_tuple_for_size {
         }
 
         impl<$($T: Display),*> DeferredTableRenderer for &[($($T),*)] {
-            fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
+            fn render_cell(&mut self, ui: &mut Ui, cell_index: CellIndex) {
                 if let Some(row_data) = self.get(cell_index.row) {
                     match cell_index.column {
                         $( $idx => ui.label(row_data.$field.to_string()), )*

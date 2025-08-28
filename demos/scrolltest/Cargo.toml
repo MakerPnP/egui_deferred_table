@@ -7,7 +7,7 @@ edition = "2024"
 egui_deferred_table = { path = "../.." }
 
 egui = { version = "0.32.1" }
-eframe = { version = "0.32.1"}
+eframe = { version = "0.32.1" }
 
 # data types
 rust_decimal = "1.37"
@@ -18,9 +18,7 @@ indexmap = "2.10.0"
 
 # data generation
 fastrand = "2"
-names = { version = "0.14", default-features = false }
 
 # logging
 env_logger = "0.11.8"
 log = "0.4.27"
-
