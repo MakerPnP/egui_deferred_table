@@ -97,36 +97,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let dimensions = data_source.get_dimensions();
 
-        // ensure there is a column width for each possible column
-        if state.column_widths.len() < dimensions.column_count {
-            // Note: We do not truncate the column widths, so that if a data source has `n` columns, then later `< n` columns
-            //       then later again `>= n` columns, the previously used columns widths still apply.
-            state
-                .column_widths
-                .resize(dimensions.column_count, cell_size.x);
-        }
-
-        // ensure there is a row height for each possible row
-        if state.row_heights.len() < dimensions.row_count {
-            // Note: We do not truncate the row heights, so that if a data source has `n` rows, then later `< n` rows
-            //       then later again `>= n` rows, the previously used rows heights still apply.
-            state.row_heights.resize(dimensions.row_count, cell_size.y);
-        }
-
-        // XXX - remove this temporary hard-coded value
-        // state.column_widths[10] = 25.0;
-        // state.column_widths[1] = 25.0;
-        // state.column_widths[2] = 200.0;
-        // state.column_widths[3] = 25.0;
-        // state.column_widths[6] = 200.0;
-        // state.column_widths[12] = 200.0;
-        // state.row_heights[10] = 10.0;
-        // state.row_heights[1] = 10.0;
-        // state.row_heights[2] = 100.0;
-        // state.row_heights[3] = 10.0;
-        // state.row_heights[6] = 100.0;
-        // state.row_heights[12] = 100.0;
-
         let mut source_state = SourceState { dimensions };
 
         let parent_max_rect = ui.max_rect();
@@ -147,7 +117,10 @@ impl<DataSource> DeferredTable<DataSource> {
         //       ... `parent_max_rect.size().at_least(self.parameters.min_size)` causes rendering errors
         let outer_max_rect =
             Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
-        trace!("outer_min_rect: {:?}, outer_max_rect: {:?}", outer_min_rect, outer_max_rect);
+        trace!(
+            "outer_min_rect: {:?}, outer_max_rect: {:?}",
+            outer_min_rect, outer_max_rect
+        );
 
         if false {
             ui.painter()
@@ -172,6 +145,42 @@ impl<DataSource> DeferredTable<DataSource> {
             let mut builder = DeferredTableBuilder::new(&mut source_state, data_source);
 
             build_table_view(&mut builder);
+
+
+            // ensure there is a column width for each possible column
+            if state.column_widths.len() < dimensions.column_count {
+                // Note: We do not truncate the column widths, so that if a data source has `n` columns, then later `< n` columns
+                //       then later again `>= n` columns, the previously used columns widths still apply.
+                state.column_widths.resize(dimensions.column_count, cell_size.x);
+
+                // apply default widths
+                builder.table.columns.iter().for_each(|(index, column)| {
+                    if let Some(width) = column.default_width {
+                        state.column_widths[*index] = width;
+                    }
+                })
+            }
+
+            // ensure there is a row height for each possible row
+            if state.row_heights.len() < dimensions.row_count {
+                // Note: We do not truncate the row heights, so that if a data source has `n` rows, then later `< n` rows
+                //       then later again `>= n` rows, the previously used rows heights still apply.
+                state.row_heights.resize(dimensions.row_count, cell_size.y);
+            }
+
+            // XXX - remove this temporary hard-coded value
+            // state.column_widths[10] = 25.0;
+            // state.column_widths[1] = 25.0;
+            // state.column_widths[2] = 200.0;
+            // state.column_widths[3] = 25.0;
+            // state.column_widths[6] = 200.0;
+            // state.column_widths[12] = 200.0;
+            // state.row_heights[10] = 10.0;
+            // state.row_heights[1] = 10.0;
+            // state.row_heights[2] = 100.0;
+            // state.row_heights[3] = 10.0;
+            // state.row_heights[6] = 100.0;
+            // state.row_heights[12] = 100.0;
 
 
             let scroll_style = ui.spacing().scroll;
@@ -367,8 +376,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     let cell_column_index = cell_origin.column + (grid_column_index - 1);
 
-                                    if let Some(column_name) = builder.table.columns.get(&cell_column_index) {
-                                        cell_ui.label(column_name);
+                                    if let Some(column) = builder.table.columns.get(&cell_column_index) {
+                                        cell_ui.label(&column.name);
                                     } else if self.parameters.zero_based_headers {
                                         cell_ui.label(cell_column_index.to_string());
                                     } else {
@@ -708,7 +717,7 @@ impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
 }
 
 struct Table {
-    columns: IndexMap<usize, String>,
+    columns: IndexMap<usize, ColumnParameters>,
     // TODO column groups here..
 }
 
@@ -766,8 +775,30 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
         self.source_state.dimensions
     }
 
-    pub fn column(&mut self, index: usize, name: String) {
-        self.table.columns.insert(index, name);
+    pub fn column(&mut self, index: usize, name: String) -> &mut ColumnParameters {
+        let parameters = ColumnParameters::new(name);
+        self.table.columns.insert(index, parameters);
+
+        &mut self.table.columns[index]
+    }
+}
+
+pub struct ColumnParameters {
+    name: String,
+    default_width: Option<f32>,
+}
+
+impl ColumnParameters {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            default_width: None,
+        }
+    }
+
+    pub fn default_width(&mut self, default_width: f32) -> &mut Self {
+        self.default_width = Some(default_width);
+        self
     }
 }
 

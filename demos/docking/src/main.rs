@@ -256,9 +256,10 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
         .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[LogEntry]>| {
             builder.header(|header_builder| {
-                for (index, field) in ["Time", "Level", "Message"].iter().enumerate() {
+                for (index, (name, width)) in [("Time", 200.0), ("Level", 100.0), ("Message", 400.0)].into_iter().enumerate() {
                     header_builder
-                        .column(index, field.to_string());
+                        .column(index, name.to_string())
+                        .default_width(width);
                 }
             })
         });
