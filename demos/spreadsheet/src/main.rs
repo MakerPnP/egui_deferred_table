@@ -2,8 +2,6 @@ extern crate core;
 
 use std::sync::{Arc, Mutex};
 use egui::ViewportBuilder;
-use egui_deferred_table::{DeferredTable, DeferredTableBuilder, TableDimensions};
-use shared::spreadsheet::SpreadsheetSource;
 use shared::spreadsheet::ui::SpreadsheetState;
 
 fn main() -> eframe::Result<()> {

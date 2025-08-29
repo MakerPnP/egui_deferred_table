@@ -10,6 +10,7 @@ use shared::data::futurama;
 use shared::sparse::ui::SparseTableState;
 use shared::spreadsheet::ui::SpreadsheetState;
 use shared::data::futurama::RowType;
+use shared::growing::ui::GrowingTableState;
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -43,11 +44,11 @@ impl Default for MyApp {
         let mut log_entries = vec![];
 
         let mut tree = DockState::new(vec![
+            Tab { name: "Growing", kind: TabKind::GrowingTable { state: Arc::new(Mutex::new(GrowingTableState::default())) } },
             Tab { name: "Sparse Table", kind: TabKind::SparseTable { state: Arc::new(Mutex::new(SparseTableState::default())) } },
-            Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: Arc::new(Mutex::new(SpreadsheetState::default()))}   },
+            Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: Arc::new(Mutex::new(SpreadsheetState::default())) } },
         ]);
 
-        // You can modify the tree before constructing the dock
         let [a, _b] =
             tree.main_surface_mut()
                 .split_left(NodeIndex::root(), 0.3, vec![
@@ -119,6 +120,7 @@ enum TabKind {
     SimpleTable { state: Arc<Mutex<SimpleTableState>> },
     Spreadsheet { state: Arc<Mutex<SpreadsheetState>> },
     SparseTable { state: Arc<Mutex<SparseTableState>> },
+    GrowingTable { state: Arc<Mutex<GrowingTableState>> },
     Log { state: Arc<Mutex<LogState>> },
 }
 
@@ -136,6 +138,9 @@ impl TabKind {
             }
             TabKind::SparseTable { state } => {
                 contents_sparse_table(ui, context, state.lock().as_mut().unwrap());
+            }
+            TabKind::GrowingTable { state } => {
+                contents_growing_table(ui, context, state.lock().as_mut().unwrap());
             }
             TabKind::Log { state } => {
                 contents_log(ui, context, state.lock().as_mut().unwrap());
@@ -168,7 +173,6 @@ struct TabContext<'a> {
 }
 
 fn contents_inside_scroll_area(ui: &mut Ui, context: &mut TabContext, _state: &mut InsideScrollAreaState) {
-
     ui.label("content above scroll area");
     ui.separator();
 
@@ -178,11 +182,11 @@ fn contents_inside_scroll_area(ui: &mut Ui, context: &mut TabContext, _state: &m
             // FIXME the table renders on top of this
             ui.label("content above table, inside scroll area");
 
-            let data_source = context.data.as_slice();
+            let mut data_source = context.data.as_slice();
 
             let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
                 .min_size((400.0, 400.0).into())
-                .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
+                .show(ui, &mut data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
 
                     builder.header(|header_builder| {
 
@@ -214,13 +218,12 @@ pub struct InsideScrollAreaState {
 }
 
 fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut SimpleTableState) {
-
     const FIELD_WIDTHS: [f32; 8] = [100.0, 80.0, 100.0, 400.0, 125.0, 100.0, 100.0, 80.0];
 
-    let data_source = context.data.as_slice();
+    let mut data_source = context.data.as_slice();
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-        .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
+        .show(ui, &mut data_source, |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
             builder.header(|header_builder| {
 
                 for (index, (field, width)) in futurama::fields().iter().zip(FIELD_WIDTHS).enumerate() {
@@ -246,11 +249,10 @@ pub struct SimpleTableState {
 }
 
 fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
-
-    let data_source = context.log_entries.as_slice();
+    let mut data_source = context.log_entries.as_slice();
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
-        .show(ui, &data_source, |builder: &mut DeferredTableBuilder<'_, &[LogEntry]>| {
+        .show(ui, &mut data_source, |builder: &mut DeferredTableBuilder<'_, &[LogEntry]>| {
             builder.header(|header_builder| {
                 for (index, (name, width)) in [("Time", 200.0), ("Level", 100.0), ("Message", 400.0)].into_iter().enumerate() {
                     header_builder
@@ -275,7 +277,6 @@ pub struct LogState {
 }
 
 fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
-
     let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
 
     for action in actions {
@@ -288,10 +289,24 @@ fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut Sprea
 }
 
 fn contents_sparse_table(ui: &mut Ui, _context: &mut TabContext, state: &mut SparseTableState) {
-
     shared::sparse::ui::show_controls(ui, state);
 
     let (_response, actions) = shared::sparse::ui::show_table(ui, state);
 
     shared::sparse::ui::handle_actions(actions, state);
+}
+
+
+fn contents_growing_table(ui: &mut Ui, context: &mut TabContext, state: &mut GrowingTableState) {
+    
+    shared::growing::ui::show_controls(ui, state);
+    let (_response, actions) = shared::growing::ui::show_table(ui, state);
+
+    for action in actions {
+        match action {
+            Action::CellClicked(cell_index) => {
+                example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
+            }
+        }
+    }
 }

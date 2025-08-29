@@ -50,7 +50,7 @@ struct UiState {
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
 
-    let data_source = &state.data;
+    let data_source = &mut state.data;
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
