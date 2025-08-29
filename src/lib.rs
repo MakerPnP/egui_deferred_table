@@ -528,7 +528,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             }
                         });
 
-                        let line_stroke = ui.style().visuals.widgets.inactive.fg_stroke;
+                        let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
                             .hline( table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + cell_size.y, line_stroke);
