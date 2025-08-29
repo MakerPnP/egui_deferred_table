@@ -66,7 +66,35 @@ impl<DataSource> DeferredTable<DataSource> {
     pub fn show(
         &self,
         ui: &mut Ui,
-        data_source: &DataSource,
+        data_source: &mut DataSource,
+        build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
+    ) -> (Response, Vec<Action>)
+    where
+        DataSource: DeferredTableDataSource + DeferredTableRenderer,
+    {
+        data_source.prepare();
+        // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
+        // each time it's called.
+
+        let dimensions = data_source.get_dimensions();
+
+        let result = if !dimensions.is_empty() {
+            self.show_inner(ui, data_source, dimensions, build_table_view)
+        } else {
+            (ui.response(), vec![])
+        };
+
+        data_source.finalize();
+
+        result
+    }
+
+    /// Safety: only call if the dimensions are non-empty
+    fn show_inner(
+        &self,
+        ui: &mut Ui,
+        data_source: &mut DataSource,
+        dimensions: TableDimensions,
         build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
     ) -> (Response, Vec<Action>)
     where
@@ -93,11 +121,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let persistent_state_id = self.id.with("persistent_state");
         let mut state = DeferredTablePersistentState::load_or_default(ctx, persistent_state_id);
-
-        // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
-        // each time it's called.
-
-        let dimensions = data_source.get_dimensions();
 
         let mut source_state = SourceState { dimensions };
 
@@ -401,7 +424,6 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if grid_row_index == 0 && grid_column_index == 0 {
                                     cell_ui.label(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row));
                                 } else if grid_row_index == 0 {
-
                                     let cell_column_index = cell_origin.column + (grid_column_index - 1);
 
                                     if let Some(column) = builder.table.columns.get(&cell_column_index) {
@@ -508,7 +530,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         .rect_filled(cell_rect, 0.0, bg_color);
 
                                     // note: cannot use 'response.clicked()' here as the the cell 'swallows' the click if the contents are interactive.
-                                    if response.contains_pointer() && ui.ctx().input(|i|i.pointer.primary_released()) {
+                                    if response.contains_pointer() && ui.ctx().input(|i| i.pointer.primary_released()) {
                                         actions.push(Action::CellClicked(cell_index));
                                     }
 
@@ -582,6 +604,12 @@ pub struct TableDimensions {
     pub column_count: usize,
 }
 
+impl TableDimensions {
+    pub fn is_empty(&self) -> bool {
+        self.row_count == 0 || self.column_count == 0
+    }
+}
+
 impl From<(usize, usize)> for TableDimensions {
     // column then row ordering in tuple to align with x/y so it's easier to remember
     fn from(value: (usize, usize)) -> Self {
@@ -638,6 +666,11 @@ impl DeferredTableTempState {
 }
 
 pub trait DeferredTableDataSource {
+    /// called once per frame, before any other methods are used.
+    fn prepare(&mut self) {}
+    /// called once per frame, after the source has been used.
+    fn finalize(&mut self) {}
+
     fn get_dimensions(&self) -> TableDimensions;
 }
 
