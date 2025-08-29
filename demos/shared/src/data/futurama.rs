@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug)]
 pub enum Kind {
     Human,
@@ -6,6 +8,13 @@ pub enum Kind {
     Robot,
     Animal,
 }
+
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format!("{:?}", self).to_lowercase())
+    }
+}
+
 
 pub type RowType = (
     String,            // Character name

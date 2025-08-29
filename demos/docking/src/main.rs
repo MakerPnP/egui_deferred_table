@@ -1,17 +1,15 @@
 extern crate core;
 
-use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
 use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use shared::data::futurama;
 use shared::sparse::ui::SparseTableState;
 use shared::spreadsheet::ui::SpreadsheetState;
-use crate::futurama::{Kind, RowType};
-
-mod futurama;
+use shared::data::futurama::RowType;
 
 fn main() -> eframe::Result<()> {
     // run with `RUST_LOG=egui_tool_windows=trace` to see trace logs
@@ -26,12 +24,6 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
-}
-
-impl Display for Kind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", format!("{:?}", self).to_lowercase())
-    }
 }
 
 type LogEntry = (DateTime<Local>, Level, String);
