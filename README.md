@@ -84,12 +84,12 @@ First release
 
 # Comparisons
 
-| Crate                                                                              | Notes                                            | Auto-size | Selection  | Hiding     | Sorting    | Filtering  | Resizable rows  | Resizable columns   | Variable amount of columns/rows | Performance with 1,000's of rows | API notes                    |
-|------------------------------------------------------------------------------------|--------------------------------------------------|-----------|------------|------------|------------|------------|-----------------|---------------------|---------------------------------|----------------------------------|------------------------------|
+| Crate                                                                              | Notes                                            | Auto-size | Selection  | Hiding     | Sorting    | Filtering  | Resizable rows  | Resizable columns    | Variable amount of columns/rows | Performance with 1,000's of rows | API notes                    |
+|------------------------------------------------------------------------------------|--------------------------------------------------|-----------|------------|------------|------------|------------|-----------------|----------------------|---------------------------------|----------------------------------|------------------------------|
 | [`egui_deferred_table`](https://github.com/makerpnp/egui_deferred_table)           | Work-in-progress                                 | No        | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 (In-progress) | 🚧 Yes (In-progress) | ✅ Yes                           | ✅ excellent                      | Very flexible                |
-| [`egui_table`](https://github.com/rerun-io/egui_table)                             | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ❌ No                | ❌ No                            | ✅ excellent                      | Flexible                     |
-| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) |                                                  | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ✅ No                | ❌ No (*2)                       | ✅ good                           | Rigid, unforgiving           |
-| [`egui_data_tables`](https://crates.io/crates/egui-data-table)                     |                                                  | ✅ (*1)    | ✅ Yes    | ✅ No       | ✅ No       | ❗ (*3)    | ❌ No            | ✅ No                | ❌ No (*2)                       | ✅ extremely poor (*4)            | Very rigid, hard-to-use (*5) |
+| [`egui_table`](https://github.com/rerun-io/egui_table)                             | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ✅ Yes                | ✅ Yes                           | ✅ excellent                      | Flexible                     |
+| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) |                                                  | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ✅ Yes                | ❗ Yes (*2)                      | ✅ good                           | Rigid, unforgiving           |
+| [`egui_data_tables`](https://crates.io/crates/egui-data-table)                     |                                                  | ✅ (*1)    | ✅ Yes    | ✅ No       | ✅ No       | ❗ (*3)    | ❌ No            | ✅ Yes                | ❗ Yes (*4)                      | ✅ extremely poor (*5)            | Very rigid, hard-to-use (*6) |
 
 1) Works only when every cell has been rendered - no-up front checking of every cell's width height.  e.g. on the first 
    frame, the rendered cells are used to calculate the column widths, but when the user scrolls down to a wider row the column width
@@ -98,8 +98,9 @@ First release
 2) requires `column` to be called at runtime for each column, conditional code in the table definition required to support variable amount of columns, must be paired
    with equal amount of calls to `header.col`, usually requiring repeating the conditional logic.
 3) Only at the API level.
-4) Very slow with a data set of ~1000 rows and 13 columns, text-only data built from strings, floats or enums.
-5) The `RowViewer` trait in the API mixes many concerns in a 'garbage-bin' style API which attempts to do everything: presentation, copy/paste, insertion/deletion, filtering, hotkeys, events.
+4) Somewhat difficult to achieve at run-time due to the API without extreme care. The examples use many magic numbers and switch statements when handling columns. 
+5) Very slow with a data set of ~1000 rows and 13 columns, text-only data built from strings, floats or enums.
+6) The `RowViewer` trait in the API mixes many concerns in a 'garbage-bin' style API which attempts to do everything: presentation, copy/paste, insertion/deletion, filtering, hotkeys, events.
    This leads to you having to implement or work-around features that you do not need/use/want.  It also mixes presentation with business-logic.  e.g. your cell rendering code is
    defined in the same trait impl that also selection changes and data deletion.  No clear separation between user interactions and rendering.
 
