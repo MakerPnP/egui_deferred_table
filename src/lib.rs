@@ -354,6 +354,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                         let mut table_width = 0.0;
                         let mut table_height = 0.0;
 
+                        let mut visible_row_index = cell_origin.row - first_row_filtered_count;
+
                         trace!("headers");
                         let header_row_bg_color = ui.style().visuals.widgets.inactive.bg_fill.gamma_multiply(0.5);
                         let mut accumulated_row_heights = 0.0;
@@ -372,10 +374,11 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     }
                                 }
                             }
+                            visible_row_index += 1;
 
                             let row_number = grid_row_index + cell_origin.row;
 
-                            let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+                            let row_bg_color = striped_row_color(visible_row_index, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
                             let row_height = if grid_row_index > 0 {
                                 state.row_heights[row_number - 1]
@@ -528,6 +531,9 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                             let start_pos = table_max_rect.min;
 
+                            // reset the visual row index for the cells, skipping the header row.
+                            visible_row_index = cell_origin.row + 1 - first_row_filtered_count;
+
                             // start with an offset equal to header height, which is currently using the cell_size
                             let mut accumulated_row_heights = cell_size.y;
                             for grid_row_index in 1..=visible_row_count {
@@ -542,10 +548,11 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         continue;
                                     }
                                 }
+                                visible_row_index += 1;
 
                                 let row_number = grid_row_index + cell_origin.row;
                                 let row_height = state.row_heights[row_number - 1];
-                                let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
+                                let row_bg_color = striped_row_color(visible_row_index, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
 
                                 let y = start_pos.y + accumulated_row_heights;
 
