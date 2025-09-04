@@ -11,30 +11,34 @@ use std::ops::Range;
 
 const SHOW_CELL_BORDERS: bool = false;
 
-pub struct DeferredTable<DataSource> {
+pub struct DeferredTable<'a, DataSource> {
     id: Id,
-    parameters: DeferredTableParameters,
+    parameters: DeferredTableParameters<'a>,
     phantom_data: PhantomData<DataSource>,
 }
 
-struct DeferredTableParameters {
+struct DeferredTableParameters<'a> {
     default_cell_size: Option<Vec2>,
     zero_based_headers: bool,
     min_size: Vec2,
+    rows_to_filter: Option<&'a Vec<usize>>,
+    columns_to_filter: Option<&'a Vec<usize>>,
 }
 
-impl Default for DeferredTableParameters {
+impl<'a> Default for DeferredTableParameters<'a> {
     fn default() -> Self {
         Self {
             default_cell_size: None,
             zero_based_headers: false,
             // TODO use a constant for this
             min_size: Vec2::new(400.0, 200.0),
+            rows_to_filter: None,
+            columns_to_filter: None,
         }
     }
 }
 
-impl<DataSource> DeferredTable<DataSource> {
+impl<'a, DataSource> DeferredTable<'a, DataSource> {
     pub fn new(id: Id) -> Self {
         Self {
             id,
@@ -60,6 +64,16 @@ impl<DataSource> DeferredTable<DataSource> {
 
     pub fn min_size(mut self, size: Vec2) -> Self {
         self.parameters.min_size = size;
+        self
+    }
+
+    pub fn filter_rows(mut self, rows_to_filter: &'a Vec<usize>) -> Self {
+        self.parameters.rows_to_filter = Some(rows_to_filter);
+        self
+    }
+
+    pub fn filter_columns(mut self, columns_to_filter: &'a Vec<usize>) -> Self {
+        self.parameters.columns_to_filter = Some(columns_to_filter);
         self
     }
 
@@ -114,13 +128,14 @@ impl<DataSource> DeferredTable<DataSource> {
         );
 
         // XXX - remove this temporary hard-coded value
-        // let cell_size: Vec2 = (50.0,25.0).into();
-
+        // let cell_size: Vec2 = (50.0, 25.0).into();
         let temp_state_id = self.id.with("temp_state");
         let mut temp_state = DeferredTableTempState::load_or_default(ctx, temp_state_id);
 
         let persistent_state_id = self.id.with("persistent_state");
         let mut state = DeferredTablePersistentState::load_or_default(ctx, persistent_state_id);
+
+        trace!("dimensions: {:?}", dimensions);
 
         let mut source_state = SourceState { dimensions };
 
@@ -163,10 +178,6 @@ impl<DataSource> DeferredTable<DataSource> {
             let previous_cell_origin = temp_state.cell_origin;
             trace!("previous_cell_origin: {:?}", previous_cell_origin);
 
-            let available_rows = source_state.dimensions.row_count;
-            let available_columns = source_state.dimensions.column_count;
-            trace!("available_rows: {}, available_columns: {}", available_rows, available_columns);
-
             let mut builder = DeferredTableBuilder::new(&mut source_state, data_source);
 
             build_table_view(&mut builder);
@@ -194,7 +205,7 @@ impl<DataSource> DeferredTable<DataSource> {
             }
 
             // XXX - remove this temporary hard-coded value
-            // // state.column_widths[10] = 25.0;
+            // //state.column_widths[10] = 25.0;
             // state.column_widths[1] = 25.0;
             // state.column_widths[2] = 200.0;
             // state.column_widths[3] = 25.0;
@@ -207,7 +218,6 @@ impl<DataSource> DeferredTable<DataSource> {
             // state.row_heights[6] = 100.0;
             // state.row_heights[12] = 100.0;
 
-
             let scroll_style = ui.spacing().scroll;
 
             //
@@ -218,10 +228,23 @@ impl<DataSource> DeferredTable<DataSource> {
             let total_content_width = state.column_widths.iter().sum::<f32>() + cell_size.x;
             let total_content_height = state.row_heights.iter().sum::<f32>() + cell_size.y;
 
+            let filtered_content_width = self.parameters.columns_to_filter.map_or(0.0,|columns|{
+                columns.iter().map(|column| {
+                    state.column_widths.get(*column).unwrap_or(&0.0)
+                }).sum::<f32>()
+            });
+
+            let filtered_content_height = self.parameters.rows_to_filter.map_or(0.0,|rows|{
+                rows.iter().map(|row| {
+                    state.row_heights.get(*row).unwrap_or(&0.0)
+                }).sum::<f32>()
+            });
+
             let total_content_size = Vec2::new(
-                total_content_width,
-                total_content_height
+                total_content_width - filtered_content_width,
+                total_content_height - filtered_content_height,
             );
+            trace!("total_content_size: {:?}, filtered_content_width: {}, filtered_content_height: {}", total_content_size, filtered_content_width, filtered_content_height);
 
             ui.scope_builder(UiBuilder::new().max_rect(inner_max_rect), |ui|{
 
@@ -259,10 +282,11 @@ impl<DataSource> DeferredTable<DataSource> {
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
 
-                        fn range_and_index_for_offset(offset: f32, values: &[f32]) -> Result<(Range<f32>, usize), ()> {
+                        fn range_and_index_for_offset(offset: f32, values: &[f32], filter: &Option<&Vec<usize>>) -> Result<(Range<f32>, usize, usize), ()> {
                             let mut index = 0;
                             let mut min = 0.0;
                             let mut max = 0.0;
+                            let mut filtered = 0;
                             loop {
                                 let Some(value) = values.get(index) else {
                                     if index == 0 {
@@ -272,6 +296,14 @@ impl<DataSource> DeferredTable<DataSource> {
                                     // no more values, use previous loop iteration values
                                     break
                                 };
+
+                                if let Some(filter) = filter {
+                                    if filter.contains(&index) {
+                                        index += 1;
+                                        filtered += 1;
+                                        continue;
+                                    }
+                                }
 
                                 max += value;
 
@@ -283,16 +315,16 @@ impl<DataSource> DeferredTable<DataSource> {
                                 index += 1;
                             }
 
-                            Ok((min..max, index))
+                            Ok((min..max, index, filtered))
                         }
 
                         // use the cells_viewport_rect for upper left and origin calculation
-                        let (first_column, cells_first_column_index) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths).unwrap();
-                        let (first_row, cells_first_row_index) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights).unwrap();
+                        let (first_column, cells_first_column_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &self.parameters.columns_to_filter).unwrap();
+                        let (first_row, cells_first_row_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &self.parameters.rows_to_filter).unwrap();
 
                         // use the total viewport (including header area) to find the last column and row
-                        let (last_column, cells_last_column_index) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths).unwrap();
-                        let (last_row, cells_last_row_index) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights).unwrap();
+                        let (last_column, cells_last_column_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &self.parameters.columns_to_filter).unwrap();
+                        let (last_row, cells_last_row_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &self.parameters.rows_to_filter).unwrap();
 
                         // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
                         // are outside of this rect
@@ -313,9 +345,11 @@ impl<DataSource> DeferredTable<DataSource> {
                         trace!("cell_origin: {:?}", cell_origin);
                         temp_state.cell_origin = cell_origin;
 
-                        let visible_row_count = cells_last_row_index - cells_first_row_index + 1;
-                        let visible_column_count = cells_last_column_index - cells_first_column_index + 1;
-
+                        let visible_row_count = cells_last_row_index - cells_first_row_index + 1 + last_row_filtered_count;
+                        let visible_column_count = cells_last_column_index - cells_first_column_index + 1 + last_column_filtered_count;
+                        trace!("visible_row_count: {}, visible_column_count: {}", visible_row_count, visible_column_count);
+                        trace!("first_column_filtered_count: {}, last_column_filtered_count: {}", first_column_filtered_count, last_column_filtered_count);
+                        trace!("first_row_filtered_count: {}, last_row_filtered_count: {}", first_row_filtered_count, last_row_filtered_count);
 
                         let mut table_width = 0.0;
                         let mut table_height = 0.0;
@@ -325,10 +359,22 @@ impl<DataSource> DeferredTable<DataSource> {
                         let mut accumulated_row_heights = 0.0;
                         for grid_row_index in 0..=visible_row_count {
                             if grid_row_index + cell_origin.row > dimensions.row_count {
+                                trace!("break 1");
                                 break
                             }
 
+                            if grid_row_index > 0 {
+                                let row = cell_origin.row + (grid_row_index - 1);
+                                if let Some(rows_to_filter) = self.parameters.rows_to_filter {
+                                    if rows_to_filter.contains(&(row)) {
+                                        trace!("filtered row");
+                                        continue;
+                                    }
+                                }
+                            }
+
                             let row_number = grid_row_index + cell_origin.row;
+
                             let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
                             let row_height = if grid_row_index > 0 {
@@ -349,6 +395,16 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 if grid_column_index + cell_origin.column > dimensions.column_count {
                                     break
+                                }
+
+                                if grid_column_index > 0 {
+                                    let column = cell_origin.column + (grid_column_index - 1);
+
+                                    if let Some(columns_to_filter) = self.parameters.columns_to_filter {
+                                        if columns_to_filter.contains(&column) {
+                                            continue;
+                                        }
+                                    }
                                 }
 
                                 let start_pos = if grid_column_index > 0 || grid_row_index > 0 {
@@ -479,6 +535,14 @@ impl<DataSource> DeferredTable<DataSource> {
                                     break
                                 }
 
+                                let row = cell_origin.row + (grid_row_index - 1);
+
+                                if let Some(rows_to_filter) = self.parameters.rows_to_filter {
+                                    if rows_to_filter.contains(&row) {
+                                        continue;
+                                    }
+                                }
+
                                 let row_number = grid_row_index + cell_origin.row;
                                 let row_height = state.row_heights[row_number - 1];
                                 let row_bg_color = striped_row_color(row_number, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
@@ -493,8 +557,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                         break
                                     }
 
-                                    let row = cell_origin.row + (grid_row_index - 1);
                                     let column = cell_origin.column + (grid_column_index - 1);
+
+                                    if let Some(columns_to_filter) = self.parameters.columns_to_filter {
+                                        if columns_to_filter.contains(&column) {
+                                            continue;
+                                        }
+                                    }
 
                                     let column_width = state.column_widths[column];
 
@@ -536,7 +605,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         //       which is not the intention.
                                         actions.push(Action::CellClicked(cell_index));
                                     }
-                                    
+
                                     // TODO track double clicks
 
                                     if SHOW_CELL_BORDERS {

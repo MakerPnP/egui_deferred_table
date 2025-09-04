@@ -21,8 +21,8 @@ impl Default for SparseTableState {
         let mut rng = Rng::new();
         let mut name_gen = Generator::with_naming(names::Name::Plain);
 
-        const MAX_ROWS: usize = 40;
-        const MAX_COLUMNS: usize = 30;
+        const MAX_ROWS: usize = 15;
+        const MAX_COLUMNS: usize = 15;
         const MAX_CELL_VALUES: usize = 50;
 
         generate_data(&mut data, MAX_ROWS, MAX_COLUMNS, MAX_CELL_VALUES, &mut rng, &mut name_gen);
@@ -45,7 +45,12 @@ struct UiState {
     boolean_value: bool,
     text_value: String,
 
-    kind_choice: Option<CellKindChoice>
+    kind_choice: Option<CellKindChoice>,
+
+    filter_rows_input: String,
+    filter_columns_input: String,
+    filter_rows: Vec<usize>,
+    filter_columns: Vec<usize>,
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
@@ -54,6 +59,8 @@ pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<A
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
+        .filter_rows(&state.ui_state.filter_rows)
+        .filter_columns(&state.ui_state.filter_columns)
         .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
             builder.header(|_header_builder| {
 
@@ -167,4 +174,30 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 }
             });
     });
+
+    ui.horizontal(|ui| {
+        egui::Frame::group(ui.style())
+            .show(ui, |ui| {
+                ui.label("Filter rows");
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_rows_input)
+                    .hint_text("Comma separated list of row indices")).changed() {
+                    state.ui_state.filter_rows = string_to_list(&state.ui_state.filter_rows_input);
+                }
+
+                ui.label("Filter columns");
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_columns_input)
+                    .hint_text("Comma separated list of column indices")).changed() {
+                    state.ui_state.filter_columns = string_to_list(&state.ui_state.filter_columns_input);
+                }
+            });
+    });
+}
+
+#[allow(dead_code)]
+fn list_to_string(list: &[usize]) -> String {
+    list.iter().map(|it|it.to_string()).collect::<Vec<_>>().join(",")
+}
+
+fn string_to_list(value: &String) -> Vec<usize> {
+    value.split(",").filter_map(|it| it.parse::<usize>().ok()).collect()
 }
