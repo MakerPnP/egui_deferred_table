@@ -180,13 +180,13 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
             .show(ui, |ui| {
                 ui.label("Filter rows");
                 if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_rows_input)
-                    .hint_text("Comma separated list of row indices")).changed() {
+                    .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
                     state.ui_state.filter_rows = string_to_list(&state.ui_state.filter_rows_input);
                 }
 
                 ui.label("Filter columns");
                 if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_columns_input)
-                    .hint_text("Comma separated list of column indices")).changed() {
+                    .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
                     state.ui_state.filter_columns = string_to_list(&state.ui_state.filter_columns_input);
                 }
             });
@@ -199,5 +199,22 @@ fn list_to_string(list: &[usize]) -> String {
 }
 
 fn string_to_list(value: &String) -> Vec<usize> {
-    value.split(",").filter_map(|it| it.parse::<usize>().ok()).collect()
+    let mut result = Vec::new();
+
+    for part in value.split(',') {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some((start, end)) = trimmed.split_once('-') {
+            if let (Ok(start_num), Ok(end_num)) = (start.parse::<usize>(), end.parse::<usize>()) {
+                result.extend(start_num..=end_num);
+            }
+        } else if let Ok(num) = trimmed.parse::<usize>() {
+            result.push(num);
+        }
+    }
+
+    result
 }
