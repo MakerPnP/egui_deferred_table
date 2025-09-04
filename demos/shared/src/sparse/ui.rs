@@ -59,13 +59,9 @@ pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<A
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
-        .filter_rows(&state.ui_state.filter_rows)
-        .filter_columns(&state.ui_state.filter_columns)
         .show(ui, data_source, |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
             builder.header(|_header_builder| {
-
                 // no need to define every column unless there's something specific
-
             })
         })
 }
@@ -181,13 +177,13 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 ui.label("Filter rows");
                 if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_rows_input)
                     .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
-                    state.ui_state.filter_rows = string_to_list(&state.ui_state.filter_rows_input);
+                    state.data.rows_to_filter = Some(string_to_list(&state.ui_state.filter_rows_input));
                 }
 
                 ui.label("Filter columns");
                 if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_columns_input)
                     .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
-                    state.ui_state.filter_columns = string_to_list(&state.ui_state.filter_columns_input);
+                    state.data.columns_to_filter = Some(string_to_list(&state.ui_state.filter_columns_input));
                 }
             });
     });
