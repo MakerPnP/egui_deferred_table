@@ -84,12 +84,13 @@ First release
 
 # Comparisons
 
-| Crate                                                                              | Notes                                            | Auto-size | Selection  | Hiding     | Sorting    | Filtering  | Resizable rows  | Resizable columns    | Variable amount of columns/rows | Performance with 1,000's of rows | API notes                    |
-|------------------------------------------------------------------------------------|--------------------------------------------------|-----------|------------|------------|------------|------------|-----------------|----------------------|---------------------------------|----------------------------------|------------------------------|
-| [`egui_deferred_table`](https://github.com/makerpnp/egui_deferred_table)           | Work-in-progress                                 | No        | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 (In-progress) | 🚧 Yes (In-progress) | ✅ Yes                           | ✅ excellent                      | Very flexible                |
-| [`egui_table`](https://github.com/rerun-io/egui_table)                             | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ✅ Yes                | ✅ Yes                           | ✅ excellent                      | Flexible                     |
-| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) |                                                  | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No            | ✅ Yes                | ❗ Yes (*2)                      | ✅ good                           | Rigid, unforgiving           |
-| [`egui_data_tables`](https://crates.io/crates/egui-data-table)                     |                                                  | ✅ (*1)    | ✅ Yes    | ✅ No       | ✅ No       | ❗ (*3)    | ❌ No            | ✅ Yes                | ❗ Yes (*4)                      | ✅ extremely poor (*5)            | Very rigid, hard-to-use (*6) |
+| Crate                                                                              | Table Grid Renderer     | Notes                                            | Auto-size | Selection  | Hiding     | Sorting    | Filtering  | Resizable rows   | Resizable columns    | Variable amount of columns/rows | Performance with 1,000's of rows | API notes                    |
+|------------------------------------------------------------------------------------|-------------------------|--------------------------------------------------|-----------|------------|------------|------------|------------|------------------|----------------------|---------------------------------|----------------------------------|------------------------------|
+| [`egui_deferred_table`](https://github.com/makerpnp/egui_deferred_table)           | Own                     | Work-in-progress                                 | No        | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 Planned | 🚧 (In-progress) | 🚧 Yes (In-progress) | ✅ Yes                           | ✅ excellent                      | Very flexible                |
+| [`egui_table`](https://github.com/rerun-io/egui_table)                             | Own                     | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No             | ✅ Yes                | ✅ Yes                           | ✅ excellent                      | Flexible                     |
+| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) | Own                     |                                                  | ✅ (*1)    | ❌ No       | ❌ No       | ❌ No       | ❌ No       | ❌ No             | ✅ Yes                | ❗ Yes (*2)                      | ✅ good                           | Rigid, unforgiving           |
+| [`egui-selectable-table`](https://crates.io/crates/egui-selectable-table)          | egui_extras::Table (*7) |                                                  | ✅ (*1)    | ✅ Yes      | ❌ No       | ✅ Yes      | ❗ (*3)     | ❌ No             | ✅ Yes                | ❗ Yes (*2)                      | ✅ good                           | Rigid, unforgiving           |           
+| [`egui-data-table`](https://crates.io/crates/egui-data-table)                      | egui_extras::Table (*7) | Comprehensive, but limited.                      | ✅ (*1)    | ✅ Yes      | ✅ No       | ✅ Yes      | ❗ (*3)     | ❌ No             | ✅ Yes                | ❗ Yes (*4)                      | ❗ poor (*5)                      | Very rigid, hard-to-use (*6) |
 
 1) Works only when every cell has been rendered - no-up front checking of every cell's width height.  e.g. on the first 
    frame, the rendered cells are used to calculate the column widths, but when the user scrolls down to a wider row the column width
@@ -103,8 +104,11 @@ First release
 6) The `RowViewer` trait in the API mixes many concerns in a 'garbage-bin' style API which attempts to do everything: presentation, copy/paste, insertion/deletion, filtering, hotkeys, events.
    This leads to you having to implement or work-around features that you do not need/use/want.  It also mixes presentation with business-logic.  e.g. your cell rendering code is
    defined in the same trait impl that also selection changes and data deletion.  No clear separation between user interactions and rendering.
+7) Since the underlying table grid system and row/column sizing is `egui_extras::Table`, it suffers from all the same issues as `egui_extra::Table`
 
 * The author of this crate has evaluated and used all the above crates in large desktop-style productivity apps.
+
+If there are any errors in the above table, please create an issue or PR.
 
 ## Timeline
 
