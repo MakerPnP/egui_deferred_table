@@ -531,8 +531,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     // note: cannot use 'response.clicked()' here as the the cell 'swallows' the click if the contents are interactive.
                                     if response.contains_pointer() && ui.ctx().input(|i| i.pointer.primary_released()) {
+                                        // FIXME this doesn't track if the click location is in the same cell, that is, this will
+                                        //       be triggered if you click somewhere, then release in this cell.
+                                        //       which is not the intention.
                                         actions.push(Action::CellClicked(cell_index));
                                     }
+                                    
+                                    // TODO track double clicks
 
                                     if SHOW_CELL_BORDERS {
                                         ui.painter()
