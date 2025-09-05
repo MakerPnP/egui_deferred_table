@@ -2,7 +2,7 @@ use egui::{Response, Ui};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, DeferredTableDataSource};
+use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
 use crate::sparse::{generate_data, CellKind, CellKindChoice, SparseMapSource};
 
 pub struct SparseTableState {
