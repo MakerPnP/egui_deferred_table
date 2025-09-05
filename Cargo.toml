@@ -1,6 +1,6 @@
 [package]
 name = "egui_deferred_table"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 documentation = "https://docs.rs/egui_deferred_table"
 repository = "https://github.com/MakerPnP/egui_deferred_table"

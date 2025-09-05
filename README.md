@@ -91,7 +91,23 @@ Available under APACHE *or* MIT licenses.
 
 ## Changelog
 
-### 0.1.0
+Possible log types:
+
+- `[added]` for new features.
+- `[changed]` for changes in existing functionality.
+- `[deprecated]` for once-stable features removed in upcoming releases.
+- `[removed]` for deprecated features removed in this release.
+- `[fixed]` for any bug fixes.
+- `[security]` to invite users to upgrade in case of vulnerabilities.
+
+### 0.1.0 (2025/09/01)
+
+First release
+
+### 0.1.1 (2025/09/05)
+
+- [added] Support row/column filtering.
+- [added] Support row/column re-ordering.
 
 First release
 
