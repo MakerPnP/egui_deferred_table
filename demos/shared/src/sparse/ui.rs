@@ -21,9 +21,9 @@ impl Default for SparseTableState {
         let mut rng = Rng::new();
         let mut name_gen = Generator::with_naming(names::Name::Plain);
 
-        const MAX_ROWS: usize = 15;
+        const MAX_ROWS: usize = 30;
         const MAX_COLUMNS: usize = 15;
-        const MAX_CELL_VALUES: usize = 50;
+        const MAX_CELL_VALUES: usize = 100;
 
         generate_data(&mut data, MAX_ROWS, MAX_COLUMNS, MAX_CELL_VALUES, &mut rng, &mut name_gen);
 

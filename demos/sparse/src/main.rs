@@ -77,7 +77,8 @@ impl MyApp {
         
         egui::Resize::default()
             .min_size((100.0, 100.0))
-            .max_size((640.0, 480.0))
+            .default_size((640.0, 480.0))
+            .max_size((1024.0, 768.0))
             .show(ui, |ui| {
 
                 let (_response, actions) = shared::sparse::ui::show_table(ui, state);
