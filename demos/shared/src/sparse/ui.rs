@@ -2,7 +2,7 @@ use egui::{Response, Ui};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, DeferredTableDataSource};
 use crate::sparse::{generate_data, CellKind, CellKindChoice, SparseMapSource};
 
 pub struct SparseTableState {
@@ -27,6 +27,10 @@ impl Default for SparseTableState {
 
         generate_data(&mut data, MAX_ROWS, MAX_COLUMNS, MAX_CELL_VALUES, &mut rng, &mut name_gen);
 
+        for (index, (column, row)) in (0..MAX_COLUMNS).zip(0..MAX_ROWS).enumerate() {
+            data.insert(row, column, CellKind::Text(format!("{} - {},{}", index, column, row)));
+        }
+
         Self {
             data,
             ui_state: UiState::default(),
@@ -49,8 +53,9 @@ struct UiState {
 
     filter_rows_input: String,
     filter_columns_input: String,
-    filter_rows: Vec<usize>,
-    filter_columns: Vec<usize>,
+
+    row_ordering_input: String,
+    column_ordering_input: String,
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
@@ -174,18 +179,39 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
     ui.horizontal(|ui| {
         egui::Frame::group(ui.style())
             .show(ui, |ui| {
+                const FILTERING_HINT: &'static str = "0,3-7,42,6";
+
                 ui.label("Filter rows");
-                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_rows_input)
-                    .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
-                    state.data.rows_to_filter = Some(string_to_list(&state.ui_state.filter_rows_input));
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_rows_input).desired_width(100.0)
+                    .hint_text(FILTERING_HINT)).changed() {
+                    state.data.rows_to_filter = Some(range_string_to_list(&state.ui_state.filter_rows_input));
                 }
 
                 ui.label("Filter columns");
-                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_columns_input)
-                    .hint_text("Comma separated indexes or index ranges, '0,3-7,42,69'")).changed() {
-                    state.data.columns_to_filter = Some(string_to_list(&state.ui_state.filter_columns_input));
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.filter_columns_input).desired_width(100.0)
+                    .hint_text(FILTERING_HINT)).changed() {
+                    state.data.columns_to_filter = Some(range_string_to_list(&state.ui_state.filter_columns_input));
                 }
             });
+
+        ui.separator();
+        egui::Frame::group(ui.style())
+            .show(ui, |ui| {
+                const ORDERING_HINT: &'static str = "0,2,1";
+
+                ui.label("Row ordering");
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.row_ordering_input).desired_width(100.0)
+                    .hint_text(ORDERING_HINT)).changed() {
+                    state.data.row_ordering = Some(string_to_list(&state.ui_state.row_ordering_input));
+                }
+
+                ui.label("Column ordering");
+                if ui.add(egui::TextEdit::singleline(&mut state.ui_state.column_ordering_input).desired_width(100.0)
+                    .hint_text(ORDERING_HINT)).changed() {
+                    state.data.column_ordering = Some(string_to_list(&state.ui_state.column_ordering_input));
+                }
+            });
+
     });
 }
 
@@ -195,22 +221,46 @@ fn list_to_string(list: &[usize]) -> String {
 }
 
 fn string_to_list(value: &String) -> Vec<usize> {
+    value.split(",").filter_map(|it| it.trim().parse::<usize>().ok()).collect()
+}
+
+/// converts user input string containing numbers and ranges.
+///
+/// input: '1,2,4-6,8', output: 'vec![1,2,4,5,6,8]
+fn range_string_to_list(value: &String) -> Vec<usize> {
     let mut result = Vec::new();
 
     for part in value.split(',') {
-        let trimmed = part.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if let Some((start, end)) = trimmed.split_once('-') {
-            if let (Ok(start_num), Ok(end_num)) = (start.parse::<usize>(), end.parse::<usize>()) {
+        if let Some((start, end)) = part.split_once('-') {
+            if let (Ok(start_num), Ok(end_num)) = (start.trim().parse::<usize>(), end.trim().parse::<usize>()) {
                 result.extend(start_num..=end_num);
             }
-        } else if let Ok(num) = trimmed.parse::<usize>() {
+        } else if let Ok(num) = part.trim().parse::<usize>() {
             result.push(num);
         }
     }
 
     result
+}
+
+#[cfg(test)]
+mod input_parsing_tests {
+    use super::range_string_to_list;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("", vec![])]
+    #[case("1", vec![1])]
+    #[case("1,2,3", vec![1, 2, 3])]
+    #[case("1-3", vec![1, 2, 3])]
+    #[case("1,2,4-6,8", vec![1, 2, 4, 5, 6, 8])]
+    #[case(" 1 , 2 , 4 - 6 , 8 ", vec![1, 2, 4, 5, 6, 8])]
+    #[case("1,,2,,", vec![1, 2])]
+    #[case("1,abc,2", vec![1, 2])]
+    #[case("1,2-abc,3", vec![1, 3])]
+    #[case("1,abc-2,3", vec![1, 3])]
+    #[case("10-15,20,25-27", vec![10, 11, 12, 13, 14, 15, 20, 25, 26, 27])]
+    fn test_range_string_to_list(#[case] input: &str, #[case] expected: Vec<usize>) {
+        assert_eq!(range_string_to_list(&input.to_string()), expected);
+    }
 }

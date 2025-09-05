@@ -24,3 +24,6 @@ names = { version = "0.14", default-features = false }
 
 # logging
 log = "0.4.27"
+
+[dev-dependencies]
+rstest = "0.26.1"

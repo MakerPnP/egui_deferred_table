@@ -20,9 +20,12 @@ pub struct SparseMapSource<V> {
 
     // cached dimensions, lazily calculated
     extents: Cell<Option<TableDimensions>>,
-    
+
     rows_to_filter: Option<Vec<usize>>,
     columns_to_filter: Option<Vec<usize>>,
+
+    row_ordering: Option<Vec<usize>>,
+    column_ordering: Option<Vec<usize>>,
 }
 
 impl<V> SparseMapSource<V> {
@@ -32,6 +35,9 @@ impl<V> SparseMapSource<V> {
             extents: Cell::new(None),
             rows_to_filter: None,
             columns_to_filter: None,
+
+            row_ordering: None,
+            column_ordering: None,
         }
     }
 
@@ -89,6 +95,14 @@ impl<V> DeferredTableDataSource for SparseMapSource<V> {
 
     fn columns_to_filter(&self) -> Option<&[usize]> {
         self.columns_to_filter.as_ref().map(|v| v.as_slice())
+    }
+
+    fn row_ordering(&self) -> Option<&[usize]> {
+        self.row_ordering.as_ref().map(|v| v.as_slice())
+    }
+
+    fn column_ordering(&self) -> Option<&[usize]> {
+        self.column_ordering.as_ref().map(|v| v.as_slice())
     }
 }
 

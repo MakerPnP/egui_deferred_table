@@ -210,21 +210,26 @@ impl<DataSource> DeferredTable<DataSource> {
             // container for the table and the scroll bars.
             //
 
+            let column_ordering = data_source.column_ordering().unwrap_or_default();
+            let row_ordering = data_source.row_ordering().unwrap_or_default();
+
             // add the width/height of the column/row headers to the sum of the column widths/row heights, respectively.
             let total_content_width = state.column_widths.iter().sum::<f32>() + cell_size.x;
             let total_content_height = state.row_heights.iter().sum::<f32>() + cell_size.y;
 
             let columns_to_filter = data_source.columns_to_filter();
             let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
-                columns.iter().map(|column| {
-                    state.column_widths.get(*column).unwrap_or(&0.0)
+                columns.iter().map(|index| {
+                    let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
+                    state.column_widths.get(mapped_index).unwrap_or(&0.0)
                 }).sum::<f32>()
             });
 
             let rows_to_filter = data_source.rows_to_filter();
             let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
-                rows.iter().map(|row| {
-                    state.row_heights.get(*row).unwrap_or(&0.0)
+                rows.iter().map(|index| {
+                    let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
+                    state.row_heights.get(mapped_index).unwrap_or(&0.0)
                 }).sum::<f32>()
             });
 
@@ -270,14 +275,22 @@ impl<DataSource> DeferredTable<DataSource> {
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
 
-                        fn range_and_index_for_offset(offset: f32, values: &[f32], filter: &Option<&[usize]>) -> Result<(Range<f32>, usize, usize), ()> {
-                            let mut index = 0;
+                        fn range_and_index_for_offset(offset: f32, values: &[f32], map: &[usize], filter: &Option<&[usize]>) -> Result<(Range<f32>, usize, usize, usize), ()> {
+                            let mut visible_index = 0;
                             let mut min = 0.0;
                             let mut max = 0.0;
                             let mut filtered = 0;
+                            let mut index ;
+                            let values_len = values.len();
                             loop {
+                                index = *map.get(visible_index).unwrap_or(&visible_index);
+                                if index >= values_len {
+                                    // handle out-of-range mapping values
+                                    index = visible_index;
+                                }
+
                                 let Some(value) = values.get(index) else {
-                                    if index == 0 {
+                                    if visible_index == 0 {
                                         // no values at all
                                         return Err(())
                                     }
@@ -285,9 +298,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                     break
                                 };
 
+                                // filter applies AFTER mapping
                                 if let Some(filter) = filter {
                                     if filter.contains(&index) {
-                                        index += 1;
+                                        visible_index += 1;
                                         filtered += 1;
                                         continue;
                                     }
@@ -300,19 +314,19 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 min += value;
-                                index += 1;
+                                visible_index += 1;
                             }
 
-                            Ok((min..max, index, filtered))
+                            Ok((min..max, index, visible_index, filtered))
                         }
 
                         // use the cells_viewport_rect for upper left and origin calculation
-                        let (first_column, cells_first_column_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &columns_to_filter).unwrap();
-                        let (first_row, cells_first_row_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &rows_to_filter).unwrap();
+                        let (first_column, first_column_index, first_column_visible_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &column_ordering, &columns_to_filter).unwrap();
+                        let (first_row, first_row_index, first_row_visible_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &row_ordering, &rows_to_filter).unwrap();
 
                         // use the total viewport (including header area) to find the last column and row
-                        let (last_column, cells_last_column_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &columns_to_filter).unwrap();
-                        let (last_row, cells_last_row_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &rows_to_filter).unwrap();
+                        let (last_column, _last_column_index, last_column_visible_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &column_ordering, &columns_to_filter).unwrap();
+                        let (last_row, _last_row_index, last_row_visible_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &row_ordering, &rows_to_filter).unwrap();
 
                         // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
                         // are outside of this rect
@@ -324,17 +338,18 @@ impl<DataSource> DeferredTable<DataSource> {
                             ui.ctx().debug_painter().debug_rect(rect, Color32::CYAN, "rect");
                         }
 
-                        trace!("cells_first_row_index: {}, cells_last_row_index: {}, cells_first_column_index: {}, cells_last_column_index: {}", cells_first_row_index, cells_last_row_index, cells_first_column_index, cells_last_column_index);
+                        trace!("first_column_index: {}, first_column_index: {}, first_column_visible_index: {}", first_column_index, first_column_index, first_column_visible_index);
+                        trace!("first_row_index: {}, first_row_index: {}, first_row_visible_index: {}", first_row_index, first_row_index, first_row_visible_index);
 
                         let cell_origin = CellIndex {
-                            row: cells_first_row_index,
-                            column: cells_first_column_index,
+                            row: first_row_visible_index,
+                            column: first_column_visible_index,
                         };
                         trace!("cell_origin: {:?}", cell_origin);
                         temp_state.cell_origin = cell_origin;
 
-                        let visible_row_count = cells_last_row_index - cells_first_row_index + 1 + last_row_filtered_count;
-                        let visible_column_count = cells_last_column_index - cells_first_column_index + 1 + last_column_filtered_count;
+                        let visible_row_count = last_row_visible_index - first_row_visible_index + 1 + last_row_filtered_count;
+                        let visible_column_count = last_column_visible_index - first_column_visible_index + 1 + last_column_filtered_count;
                         trace!("visible_row_count: {}, visible_column_count: {}", visible_row_count, visible_column_count);
                         trace!("first_column_filtered_count: {}, last_column_filtered_count: {}", first_column_filtered_count, last_column_filtered_count);
                         trace!("first_row_filtered_count: {}, last_row_filtered_count: {}", first_row_filtered_count, last_row_filtered_count);
@@ -342,7 +357,7 @@ impl<DataSource> DeferredTable<DataSource> {
                         let mut table_width = 0.0;
                         let mut table_height = 0.0;
 
-                        let mut visible_row_index = cell_origin.row - first_row_filtered_count;
+                        let mut row_counter = cell_origin.row - first_row_filtered_count;
 
                         trace!("headers");
                         let header_row_bg_color = ui.style().visuals.widgets.inactive.bg_fill.gamma_multiply(0.5);
@@ -353,23 +368,24 @@ impl<DataSource> DeferredTable<DataSource> {
                                 break
                             }
 
+                            let visible_row_index = cell_origin.row + (grid_row_index.saturating_sub(1));
+                            let mapped_row_index = Self::map_index(dimensions.row_count, row_ordering, visible_row_index);
+
                             if grid_row_index > 0 {
-                                let row = cell_origin.row + (grid_row_index - 1);
                                 if let Some(rows_to_filter) = &rows_to_filter {
-                                    if rows_to_filter.contains(&(row)) {
+                                    if rows_to_filter.contains(&(mapped_row_index)) {
                                         trace!("filtered row");
                                         continue;
                                     }
                                 }
                             }
-                            visible_row_index += 1;
+                            row_counter += 1;
 
-                            let row_number = grid_row_index + cell_origin.row;
 
-                            let row_bg_color = striped_row_color(visible_row_index, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+                            let row_bg_color = striped_row_color(row_counter, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
                             let row_height = if grid_row_index > 0 {
-                                state.row_heights[row_number - 1]
+                                *state.row_heights.get(mapped_row_index).unwrap_or(&cell_size.y)
                             } else {
                                 cell_size.y
                             };
@@ -377,8 +393,6 @@ impl<DataSource> DeferredTable<DataSource> {
                             let mut accumulated_column_widths = 0.0;
 
                             for grid_column_index in 0..=visible_column_count {
-                                let column_number = grid_column_index + cell_origin.column;
-
                                 if grid_row_index >= 1 && grid_column_index >= 1 {
                                     // no cell rendering
                                     break
@@ -388,11 +402,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                     break
                                 }
 
-                                if grid_column_index > 0 {
-                                    let column = cell_origin.column + (grid_column_index - 1);
+                                let visible_column_index = cell_origin.column + (grid_column_index.saturating_sub(1));
+                                let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
 
+                                if grid_column_index > 0 {
                                     if let Some(columns_to_filter) = &columns_to_filter {
-                                        if columns_to_filter.contains(&column) {
+                                        if columns_to_filter.contains(&mapped_column_index) {
+                                            trace!("filtered column");
                                             continue;
                                         }
                                     }
@@ -405,7 +421,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 };
 
                                 let column_width = if grid_column_index > 0 {
-                                    state.column_widths[column_number - 1]
+                                    *state.column_widths.get(mapped_column_index).unwrap_or(&cell_size.x)
                                 } else {
                                     cell_size.x
                                 };
@@ -440,7 +456,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let cell_clip_rect_size = cell_clip_rect.size();
                                 let skip = cell_clip_rect_size.x < 0.0 || cell_clip_rect_size.y < 0.0;
 
-                                trace!("grid: rn={}, r={}, c={}, cell_rect: {:?}, cell_clip_rect: {:?}, pos: {:?}, size: {:?}, skip: {}", row_number, grid_row_index, grid_column_index, cell_rect, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
+                                trace!("grid: i=[{},{}] v=[{},{}], m=[{},{}], cell_rect: {:?}, cell_clip_rect: {:?}, pos: {:?}, size: {:?}, skip: {}",
+                                    grid_row_index, grid_column_index,
+                                    visible_row_index, visible_column_index,
+                                    mapped_row_index, mapped_column_index,
+                                    cell_rect, cell_clip_rect, cell_clip_rect.min, cell_clip_rect_size, skip);
 
                                 if skip {
                                     continue;
@@ -471,22 +491,20 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if grid_row_index == 0 && grid_column_index == 0 {
                                     cell_ui.label(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row));
                                 } else if grid_row_index == 0 {
-                                    let cell_column_index = cell_origin.column + (grid_column_index - 1);
-
-                                    if let Some(column) = builder.table.columns.get(&cell_column_index) {
+                                    if let Some(column) = builder.table.columns.get(&mapped_column_index) {
                                         cell_ui.label(&column.name);
                                     } else if self.parameters.zero_based_headers {
-                                        cell_ui.label(cell_column_index.to_string());
+                                        cell_ui.label(mapped_column_index.to_string());
                                     } else {
-                                        cell_ui.label(column_number.to_string());
+                                        let mapped_column_number = mapped_column_index + 1;
+                                        cell_ui.label(mapped_column_number.to_string());
                                     }
                                 } else {
-                                    let cell_row_index = cell_origin.row + (grid_row_index - 1);
-
                                     if self.parameters.zero_based_headers {
-                                        cell_ui.label(cell_row_index.to_string());
+                                        cell_ui.label(mapped_row_index.to_string());
                                     } else {
-                                        cell_ui.label(row_number.to_string());
+                                        let mapped_row_number = mapped_row_index + 1;
+                                        cell_ui.label(mapped_row_number.to_string());
                                     }
                                 }
 
@@ -520,7 +538,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             let start_pos = table_max_rect.min;
 
                             // reset the visual row index for the cells, skipping the header row.
-                            visible_row_index = cell_origin.row + 1 - first_row_filtered_count;
+                            row_counter = cell_origin.row + 1 - first_row_filtered_count;
 
                             // start with an offset equal to header height, which is currently using the cell_size
                             let mut accumulated_row_heights = cell_size.y;
@@ -529,18 +547,19 @@ impl<DataSource> DeferredTable<DataSource> {
                                     break
                                 }
 
-                                let row = cell_origin.row + (grid_row_index - 1);
+                                let visible_row_index = cell_origin.row + (grid_row_index.saturating_sub(1));
+                                let mapped_row_index = Self::map_index(dimensions.row_count, row_ordering, visible_row_index);
 
                                 if let Some(rows_to_filter) = &rows_to_filter {
-                                    if rows_to_filter.contains(&row) {
+                                    if rows_to_filter.contains(&mapped_row_index) {
+                                        trace!("filtered row");
                                         continue;
                                     }
                                 }
-                                visible_row_index += 1;
+                                row_counter += 1;
 
-                                let row_number = grid_row_index + cell_origin.row;
-                                let row_height = state.row_heights[row_number - 1];
-                                let row_bg_color = striped_row_color(visible_row_index, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
+                                let row_height = state.row_heights[mapped_row_index];
+                                let row_bg_color = striped_row_color(row_counter, &ui.style()).unwrap_or(ui.style().visuals.panel_fill);
 
                                 let y = start_pos.y + accumulated_row_heights;
 
@@ -552,19 +571,21 @@ impl<DataSource> DeferredTable<DataSource> {
                                         break
                                     }
 
-                                    let column = cell_origin.column + (grid_column_index - 1);
+                                    let visible_column_index = cell_origin.column + (grid_column_index - 1);
+                                    let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
 
                                     if let Some(columns_to_filter) = &columns_to_filter {
-                                        if columns_to_filter.contains(&column) {
+                                        if columns_to_filter.contains(&mapped_column_index) {
+                                            trace!("filtered column");
                                             continue;
                                         }
                                     }
 
-                                    let column_width = state.column_widths[column];
+                                    let column_width = state.column_widths[visible_column_index];
 
                                     let cell_index = CellIndex {
-                                        row,
-                                        column,
+                                        row: mapped_row_index,
+                                        column: mapped_column_index,
                                     };
 
                                     let x = start_pos.x + accumulated_column_widths;
@@ -635,6 +656,17 @@ impl<DataSource> DeferredTable<DataSource> {
         DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
+    }
+
+    fn map_index(count: usize, row_ordering: &[usize], visible_row_index: usize) -> usize {
+        let mut mapped_row_index = *row_ordering
+            .get(visible_row_index)
+            .unwrap_or(&visible_row_index);
+        if mapped_row_index >= count {
+            // handle out-of-range mapping values
+            mapped_row_index = visible_row_index;
+        }
+        mapped_row_index
     }
 }
 
@@ -749,6 +781,26 @@ pub trait DeferredTableDataSource {
 
     /// return a list of column indexes to filter/exclude.
     fn columns_to_filter(&self) -> Option<&[usize]> {
+        None
+    }
+
+    /// return a list of row indexes to set the ordering of rows
+    ///
+    /// the index of the slice corresponds to the index of the visible row
+    /// the value of the slace at the index corresponds to the index of the data
+    ///
+    /// e.g. `Some(vec![1,0])` would swap rows 0 and 1.
+    fn row_ordering(&self) -> Option<&[usize]> {
+        None
+    }
+
+    /// return a list of row indexes to set the ordering of columns
+    ///
+    /// the index of the slice corresponds to the index of the visible column
+    /// the value of the slace at the index corresponds to the index of the data
+    ///
+    /// e.g. `Some(vec![1,0])` would swap columns 0 and 1.
+    fn column_ordering(&self) -> Option<&[usize]> {
         None
     }
 }
