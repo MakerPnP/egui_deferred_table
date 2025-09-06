@@ -54,11 +54,8 @@ impl eframe::App for MyApp {
                     let state = state_lock.as_mut().unwrap();
 
                     let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
-                    
-                    for action in actions {
-                        println!("{:?}", action);
-                    }
 
+                    shared::spreadsheet::ui::handle_actions(actions, state);
                 });
             
             ui.separator();

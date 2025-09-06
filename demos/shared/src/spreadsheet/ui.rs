@@ -1,4 +1,5 @@
 use egui::{Response, Ui};
+use log::debug;
 use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
 use crate::spreadsheet::SpreadsheetSource;
 
@@ -34,4 +35,19 @@ pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<A
                 // header_builder.create_group("Remainder", None);
             })
         })
+}
+
+pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {
+    for action in actions {
+        debug!("action: {:?}", action);
+        match action {
+            Action::CellClicked(cell_index) => {
+                println!("cell clicked: {:?}", cell_index);
+            }
+            Action::ColumnReorder { from, to } => {
+                // we actually want to MOVE the column data itself, not re-order the columns
+                state.data_source.move_column(from, to);
+            }
+        }
+    }
 }

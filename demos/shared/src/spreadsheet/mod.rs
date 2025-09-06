@@ -34,7 +34,7 @@ impl SpreadsheetSource {
         ];
 
         Self {
-            data
+            data,
         }
     }
 
@@ -99,6 +99,15 @@ impl SpreadsheetSource {
         }
 
         result
+    }
+
+    pub fn move_column(&mut self, from: usize, to: usize) {
+        for row in self.data.iter_mut() {
+            let value = row.remove(from);
+            row.insert(to, value);
+        }
+
+        // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
     }
 }
 

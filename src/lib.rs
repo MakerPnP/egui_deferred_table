@@ -1,10 +1,10 @@
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, Context, CornerRadius, Id, Pos2, Rect, Response, Sense, StrokeKind, Style, Ui,
-    UiBuilder, Vec2,
+    Color32, Context, CornerRadius, Id, PopupAnchor, Pos2, Rect, Response, Sense, StrokeKind,
+    Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
-use log::trace;
+use log::{info, trace};
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -100,7 +100,7 @@ impl<DataSource> DeferredTable<DataSource> {
     where
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
-        let ctx = ui.ctx();
+        let ctx = ui.ctx().clone();
         let style = ui.style();
 
         let mut actions = vec![];
@@ -116,10 +116,10 @@ impl<DataSource> DeferredTable<DataSource> {
         // XXX - remove this temporary hard-coded value
         // let cell_size: Vec2 = (50.0, 25.0).into();
         let temp_state_id = self.id.with("temp_state");
-        let mut temp_state = DeferredTableTempState::load_or_default(ctx, temp_state_id);
+        let mut temp_state = DeferredTableTempState::load_or_default(&ctx, temp_state_id);
 
         let persistent_state_id = self.id.with("persistent_state");
-        let mut state = DeferredTablePersistentState::load_or_default(ctx, persistent_state_id);
+        let mut state = DeferredTablePersistentState::load_or_default(&ctx, persistent_state_id);
 
         trace!("dimensions: {:?}", dimensions);
 
@@ -127,6 +127,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
+        let ui_layer_id = ui.layer_id();
 
         // the x/y of this can have negative values if the OUTER scroll area is scrolled right or down, respectively.
         // i.e. if the outer scroll area scrolled down, the y will be negative, above the visible area.
@@ -466,7 +467,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                     continue;
                                 }
 
-                                let _response = ui.allocate_rect(cell_clip_rect, Sense::click());
+                                let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
+
+                                response.dnd_set_drag_payload((visible_column_index, mapped_column_index));
 
                                 let bg_color = if grid_row_index == 0 {
                                     header_row_bg_color
@@ -488,23 +491,61 @@ impl<DataSource> DeferredTable<DataSource> {
                                 cell_ui.set_clip_rect(cell_clip_rect);
                                 cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                                if grid_row_index == 0 && grid_column_index == 0 {
-                                    cell_ui.label(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row));
+                                enum HeadingItem {
+                                    Corner,
+                                    Column,
+                                    Row
+                                }
+
+                                let (what, label) = if grid_row_index == 0 && grid_column_index == 0 {
+                                    (HeadingItem::Corner, format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row))
                                 } else if grid_row_index == 0 {
-                                    if let Some(column) = builder.table.columns.get(&mapped_column_index) {
-                                        cell_ui.label(&column.name);
+                                    let label = if let Some(column) = builder.table.columns.get(&mapped_column_index) {
+                                        column.name.clone()
                                     } else if self.parameters.zero_based_headers {
-                                        cell_ui.label(mapped_column_index.to_string());
+                                        mapped_column_index.to_string()
                                     } else {
                                         let mapped_column_number = mapped_column_index + 1;
-                                        cell_ui.label(mapped_column_number.to_string());
-                                    }
+                                        mapped_column_number.to_string()
+                                    };
+
+                                    (HeadingItem::Column, label)
                                 } else {
-                                    if self.parameters.zero_based_headers {
-                                        cell_ui.label(mapped_row_index.to_string());
+                                    let label = if self.parameters.zero_based_headers {
+                                        mapped_row_index.to_string()
                                     } else {
                                         let mapped_row_number = mapped_row_index + 1;
-                                        cell_ui.label(mapped_row_number.to_string());
+                                        mapped_row_number.to_string()
+                                    };
+
+                                    (HeadingItem::Row, label)
+                                };
+
+                                cell_ui.add(
+                                    egui::Label::new(&label).selectable(false),
+                                );
+
+                                if matches!(what, HeadingItem::Column) {
+                                    if response.dragged() {
+                                        Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
+                                            .gap(12.0)
+                                            .show(|ui|{
+                                                ui.label(label);
+                                            });
+                                    }
+
+                                    // Highlight drop target
+                                    if response.dnd_hover_payload::<(usize, usize)>().is_some() {
+                                        ui.painter().rect_filled(
+                                            cell_clip_rect,
+                                            CornerRadius::ZERO,
+                                            ui.style().visuals.selection.bg_fill.gamma_multiply(0.25),
+                                        );
+                                    }
+
+                                    if let Some(payload) = response.dnd_release_payload::<(usize, usize)>() {
+                                        info!("dropped: {:?} onto: {:?}", *payload, (visible_column_index, mapped_column_index));
+                                        actions.push(Action::ColumnReorder{ from: payload.1, to: mapped_column_index })
                                     }
                                 }
 
@@ -681,6 +722,20 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
 #[derive(Clone, Debug)]
 pub enum Action {
     CellClicked(CellIndex),
+
+    /// when the user drags-and-drops one column onto another this action is generated.
+    /// handle it by either:
+    /// a) updating the column ordering information appropriately.
+    /// d) updating the underlying data source, without re-ordering columns themselves.
+    /// c) ignore it, e.g. if it's unsupported, or the columns/data are locked.
+    ///
+    /// See also:
+    /// 1. [`DeferredTableDataSource::column_ordering`]
+    /// 2. [`apply_reordering`]
+    ColumnReorder {
+        from: usize,
+        to: usize,
+    },
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1170,3 +1225,43 @@ impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M), 13);
 impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M, N), 14);
 impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M, N, O), 15);
 impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P), 16);
+
+/// Helper method to be used by clients to help with handling column re-ordering during action processing.
+///
+/// ```ignore
+/// match action {
+///     Action::ColumnReorder { from, to } => {
+///         egui_deferred_table::apply_column_reordering(&mut column_ordering, from, to);
+///     }
+///     // ...
+/// }
+///```
+///
+/// See also:
+/// 1. [`DeferredTableDataSource::column_ordering`]
+/// 2. [`DeferredTableDataSource::row_ordering`]
+/// 3. [`Action::ColumnReorder`]
+///
+pub fn apply_reordering(ordering: &mut Option<Vec<usize>>, from: usize, to: usize) {
+    // Initialize ordering if it doesn't exist
+    if ordering.is_none() {
+        *ordering = Some(Vec::new());
+    }
+
+    // Get a mutable reference to column_ordering
+    let Some(column_ordering) = ordering else {
+        unreachable!();
+    };
+
+    // Find the maximum index needed
+    let max_index = from.max(to);
+
+    // Expand the vector if needed to include max_index
+    while column_ordering.len() <= max_index {
+        column_ordering.push(column_ordering.len());
+    }
+
+    // Perform the swap
+    let value = column_ordering.remove(from);
+    column_ordering.insert(to, value);
+}

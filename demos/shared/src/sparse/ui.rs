@@ -2,7 +2,7 @@ use egui::{Response, Ui};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use egui_deferred_table::{apply_reordering, Action, DeferredTable, DeferredTableBuilder};
 use crate::sparse::{generate_data, CellKind, CellKindChoice, SparseMapSource};
 
 pub struct SparseTableState {
@@ -95,6 +95,12 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
                         },
                     }
                 }
+            }
+            Action::ColumnReorder { from, to } => {
+                apply_reordering(&mut state.data.column_ordering, from, to);
+
+                // Update UI to reflect changes
+                state.ui_state.column_ordering_input = list_to_string(state.data.column_ordering.as_mut().unwrap());
             }
         }
     }

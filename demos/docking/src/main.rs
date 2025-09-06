@@ -202,6 +202,9 @@ fn contents_inside_scroll_area(ui: &mut Ui, context: &mut TabContext, _state: &m
                     Action::CellClicked(cell_index) => {
                         example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
                     }
+                    _ => {
+                        // ignored
+                    }
                 }
             }
 
@@ -239,6 +242,9 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
             Action::CellClicked(cell_index) => {
                 example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
             }
+            _ => {
+                // ignored
+            }
         }
     }
 }
@@ -267,6 +273,9 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
             Action::CellClicked(cell_index) => {
                 example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
             }
+            _ => {
+                // ignored
+            }
         }
     }
 }
@@ -277,15 +286,21 @@ pub struct LogState {
 }
 
 fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
-    let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
+    let (_response, mut actions) = shared::spreadsheet::ui::show_table(ui, state);
 
-    for action in actions {
-        match action {
-            Action::CellClicked(cell_index) => {
-                example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
-            }
+    // override some of the default action processing
+    actions.retain(|action| match action {
+        Action::CellClicked(cell_index) => {
+            example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index));
+            false
         }
-    }
+        _ => {
+            true
+        }
+    });
+
+    // use the default processing for remaining actions
+    shared::spreadsheet::ui::handle_actions(actions, state);
 }
 
 fn contents_sparse_table(ui: &mut Ui, _context: &mut TabContext, state: &mut SparseTableState) {
@@ -306,6 +321,9 @@ fn contents_growing_table(ui: &mut Ui, context: &mut TabContext, state: &mut Gro
         match action {
             Action::CellClicked(cell_index) => {
                 example_log(context.log_entries, Level::Info, format!("Cell clicked. cell: {:?}", cell_index))
+            }
+            _ => {
+                // ignored
             }
         }
     }
