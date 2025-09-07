@@ -1,6 +1,5 @@
 extern crate core;
 
-use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex};
@@ -44,24 +43,24 @@ impl Default for MyApp {
         let mut log_entries = vec![];
 
         let mut tree = DockState::new(vec![
-            Tab { name: "Growing", kind: TabKind::GrowingTable { state: Arc::new(Mutex::new(GrowingTableState::default())) } },
-            Tab { name: "Sparse Table", kind: TabKind::SparseTable { state: Arc::new(Mutex::new(SparseTableState::default())) } },
-            Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: Arc::new(Mutex::new(SpreadsheetState::default())) } },
+            Tab { name: "Growing", kind: TabKind::GrowingTable { state: GrowingTableState::default() } },
+            Tab { name: "Sparse Table", kind: TabKind::SparseTable { state: SparseTableState::default() } },
+            Tab { name: "Spreadsheet", kind: TabKind::Spreadsheet { state: SpreadsheetState::default() } },
         ]);
 
         let [a, _b] =
             tree.main_surface_mut()
                 .split_left(NodeIndex::root(), 0.3, vec![
-                    Tab { name: "Tables in a tab", kind: TabKind::TableInsideScrollArea { state: Arc::new(Mutex::new(InsideScrollAreaState::default()))} },
+                    Tab { name: "Tables in a tab", kind: TabKind::TableInsideScrollArea { state: InsideScrollAreaState::default() } },
                 ]);
         let [_, _] = tree
             .main_surface_mut()
             .split_below(a, 0.7, vec![
-                Tab { name: "Log", kind: TabKind::Log { state: Arc::new(Mutex::new(LogState::default()))} },
+                Tab { name: "Log", kind: TabKind::Log { state: LogState::default() } },
             ]);
         let _ = tree
             .add_window( vec![
-                Tab { name: "Simple (initially floating)", kind: TabKind::SimpleTable { state: Arc::new(Mutex::new(SimpleTableState::default()))} },
+                Tab { name: "Simple (initially floating)", kind: TabKind::SimpleTable { state: SimpleTableState::default() } },
             ]);
 
         example_log(&mut log_entries, Level::Info, "Demo started".into());
@@ -116,34 +115,34 @@ struct Tab {
 }
 
 enum TabKind {
-    TableInsideScrollArea { state: Arc<Mutex<InsideScrollAreaState>> },
-    SimpleTable { state: Arc<Mutex<SimpleTableState>> },
-    Spreadsheet { state: Arc<Mutex<SpreadsheetState>> },
-    SparseTable { state: Arc<Mutex<SparseTableState>> },
-    GrowingTable { state: Arc<Mutex<GrowingTableState>> },
-    Log { state: Arc<Mutex<LogState>> },
+    TableInsideScrollArea { state: InsideScrollAreaState },
+    SimpleTable { state: SimpleTableState },
+    Spreadsheet { state: SpreadsheetState },
+    SparseTable { state: SparseTableState },
+    GrowingTable { state: GrowingTableState },
+    Log { state: LogState },
 }
 
 impl TabKind {
     pub fn ui(&mut self, ui: &mut egui::Ui, context: &mut TabContext) {
         match self {
             TabKind::TableInsideScrollArea { state } => {
-                contents_inside_scroll_area(ui, context, state.lock().as_mut().unwrap());
+                contents_inside_scroll_area(ui, context, state);
             }
             TabKind::SimpleTable { state } => {
-                contents_simple_table(ui, context, state.lock().as_mut().unwrap());
+                contents_simple_table(ui, context, state);
             }
             TabKind::Spreadsheet { state } => {
-                contents_spreadsheet(ui, context, state.lock().as_mut().unwrap());
+                contents_spreadsheet(ui, context, state);
             }
             TabKind::SparseTable { state } => {
-                contents_sparse_table(ui, context, state.lock().as_mut().unwrap());
+                contents_sparse_table(ui, context, state);
             }
             TabKind::GrowingTable { state } => {
-                contents_growing_table(ui, context, state.lock().as_mut().unwrap());
+                contents_growing_table(ui, context, state);
             }
             TabKind::Log { state } => {
-                contents_log(ui, context, state.lock().as_mut().unwrap());
+                contents_log(ui, context, state);
             }
         }
     }

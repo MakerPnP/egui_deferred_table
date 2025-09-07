@@ -1,6 +1,5 @@
 extern crate core;
 
-use std::sync::{Arc, Mutex};
 use egui::ViewportBuilder;
 use shared::spreadsheet::ui::SpreadsheetState;
 
@@ -22,14 +21,14 @@ fn main() -> eframe::Result<()> {
 struct MyApp {
     inspection: bool,
     
-    state: Arc<Mutex<SpreadsheetState>>,
+    state: SpreadsheetState,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             inspection: false,
-            state: Arc::new(Mutex::new(SpreadsheetState::default())),
+            state: SpreadsheetState::default(),
         }
     }
 }
@@ -50,12 +49,9 @@ impl eframe::App for MyApp {
             egui::ScrollArea::both()
                 .show(ui, |ui| {
 
-                    let mut state_lock = self.state.lock();
-                    let state = state_lock.as_mut().unwrap();
+                    let (_response, actions) = shared::spreadsheet::ui::show_table(ui, &mut self.state);
 
-                    let (_response, actions) = shared::spreadsheet::ui::show_table(ui, state);
-
-                    shared::spreadsheet::ui::handle_actions(actions, state);
+                    shared::spreadsheet::ui::handle_actions(actions, &mut self.state);
                 });
             
             ui.separator();
