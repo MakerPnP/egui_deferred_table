@@ -132,38 +132,54 @@ impl SpreadsheetSource {
 
         result
     }
-    pub fn update_formulas_for_column_move(&mut self, from: usize, to: usize) {
-        // Create a mapping of old column indices to new column indices
-        let mut column_mapping = std::collections::HashMap::new();
+
+    pub fn update_formulas_for_move(&mut self, move_type: MoveType, from: usize, to: usize) {
+        // Create a mapping of old indices to new indices
+        let mut index_mapping = std::collections::HashMap::new();
+
+        // Get the appropriate dimension for the mapping
+        let dimension_size = match move_type {
+            MoveType::Row => self.data.len(),
+            MoveType::Column => {
+                if self.data.is_empty() {
+                    0
+                } else {
+                    self.data[0].len()
+                }
+            }
+        };
 
         // Build the mapping based on the move operation
         if from < to {
-            // Moving column to the right
-            for col in 0..self.data[0].len() {
-                if col == from {
-                    column_mapping.insert(col, to);
-                } else if col > from && col <= to {
-                    column_mapping.insert(col, col - 1);
+            // Moving right/down
+            for idx in 0..dimension_size {
+                if idx == from {
+                    index_mapping.insert(idx, to);
+                } else if idx > from && idx <= to {
+                    index_mapping.insert(idx, idx - 1);
                 } else {
-                    column_mapping.insert(col, col);
+                    index_mapping.insert(idx, idx);
                 }
             }
         } else {
-            // Moving column to the left
-            for col in 0..self.data[0].len() {
-                if col == from {
-                    column_mapping.insert(col, to);
-                } else if col >= to && col < from {
-                    column_mapping.insert(col, col + 1);
+            // Moving left/up
+            for idx in 0..dimension_size {
+                if idx == from {
+                    index_mapping.insert(idx, to);
+                } else if idx >= to && idx < from {
+                    index_mapping.insert(idx, idx + 1);
                 } else {
-                    column_mapping.insert(col, col);
+                    index_mapping.insert(idx, idx);
                 }
             }
         }
 
         // Debug the mapping
-        for (old_col, new_col) in &column_mapping {
-            trace!("Column mapping: {} -> {}", old_col, new_col);
+        for (old_idx, new_idx) in &index_mapping {
+            match move_type {
+                MoveType::Row => trace!("Row mapping: {} -> {}", old_idx, new_idx),
+                MoveType::Column => trace!("Column mapping: {} -> {}", old_idx, new_idx),
+            }
         }
 
         // For each cell in the spreadsheet that has a formula
@@ -181,13 +197,41 @@ impl SpreadsheetSource {
                     // Identify all the replacements needed
                     for dep in dependencies {
                         if let Some((dep_row, dep_col)) = Self::parse_cell_reference(&dep) {
-                            if let Some(&new_col) = column_mapping.get(&dep_col) {
-                                if new_col != dep_col {
-                                    replacements.push((
-                                        dep.clone(),
-                                        format!("{}{}", Self::make_column_name(new_col), dep_row + 1)
-                                    ));
+                            let (should_replace, old_ref, new_ref) = match move_type {
+                                MoveType::Row => {
+                                    if let Some(&new_row) = index_mapping.get(&dep_row) {
+                                        if new_row != dep_row {
+                                            (
+                                                true,
+                                                dep.clone(),
+                                                format!("{}{}", Self::make_column_name(dep_col), new_row + 1)
+                                            )
+                                        } else {
+                                            (false, String::new(), String::new())
+                                        }
+                                    } else {
+                                        (false, String::new(), String::new())
+                                    }
+                                },
+                                MoveType::Column => {
+                                    if let Some(&new_col) = index_mapping.get(&dep_col) {
+                                        if new_col != dep_col {
+                                            (
+                                                true,
+                                                dep.clone(),
+                                                format!("{}{}", Self::make_column_name(new_col), dep_row + 1)
+                                            )
+                                        } else {
+                                            (false, String::new(), String::new())
+                                        }
+                                    } else {
+                                        (false, String::new(), String::new())
+                                    }
                                 }
+                            };
+
+                            if should_replace {
+                                replacements.push((old_ref, new_ref));
                             }
                         }
                     }
@@ -228,109 +272,13 @@ impl SpreadsheetSource {
         }
     }
 
-    pub fn update_formulas_for_row_move(&mut self, from: usize, to: usize) {
-        // Create a mapping of old row indices to new row indices
-        let mut row_mapping = std::collections::HashMap::new();
-
-        // Build the mapping based on the move operation
-        if from < to {
-            // Moving row down
-            for row in 0..self.data.len() {
-                if row == from {
-                    row_mapping.insert(row, to);
-                } else if row > from && row <= to {
-                    row_mapping.insert(row, row - 1);
-                } else {
-                    row_mapping.insert(row, row);
-                }
-            }
-        } else {
-            // Moving row up
-            for row in 0..self.data.len() {
-                if row == from {
-                    row_mapping.insert(row, to);
-                } else if row >= to && row < from {
-                    row_mapping.insert(row, row + 1);
-                } else {
-                    row_mapping.insert(row, row);
-                }
-            }
-        }
-
-        // Debug the mapping
-        for (old_row, new_row) in &row_mapping {
-            trace!("Row mapping: {} -> {}", old_row, new_row);
-        }
-
-        // For each cell in the spreadsheet that has a formula
-        for row_idx in 0..self.data.len() {
-            for col_idx in 0..self.data[row_idx].len() {
-                if let CellValue::Calculated(formula, _) = &mut self.data[row_idx][col_idx] {
-                    let old_formula = formula.formula.clone();
-
-                    // Extract cell references from the formula
-                    let dependencies = Self::extract_dependencies(&old_formula);
-
-                    // Create a list of replacements to make
-                    let mut replacements = Vec::new();
-
-                    // Identify all the replacements needed
-                    for dep in dependencies {
-                        if let Some((dep_row, dep_col)) = Self::parse_cell_reference(&dep) {
-                            if let Some(&new_row) = row_mapping.get(&dep_row) {
-                                if new_row != dep_row {
-                                    replacements.push((
-                                        dep.clone(),
-                                        format!("{}{}", Self::make_column_name(dep_col), new_row + 1)
-                                    ));
-                                }
-                            }
-                        }
-                    }
-
-                    // Sort replacements by length in descending order to avoid partial matches
-                    replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-
-                    // Apply all replacements to create the new formula
-                    let mut new_formula = old_formula.clone();
-
-                    // Use a temporary formula with markers to avoid replacing parts of already replaced references
-                    let mut temp_formula = new_formula.clone();
-                    for (i, (old_ref, new_ref)) in replacements.iter().enumerate() {
-                        // Use a unique marker for each replacement
-                        let marker = format!("__REF_MARKER_{}_", i);
-
-                        // Replace the old reference with the marker
-                        temp_formula = temp_formula.replace(old_ref, &marker);
-
-                        // Track the replacement for logging
-                        debug!("Will replace {} with {}", old_ref, new_ref);
-                    }
-
-                    // Now apply the actual replacements
-                    new_formula = temp_formula.clone();
-                    for (i, (_, new_ref)) in replacements.iter().enumerate() {
-                        let marker = format!("__REF_MARKER_{}_", i);
-                        new_formula = new_formula.replace(&marker, new_ref);
-                    }
-
-                    // Update the formula if it changed
-                    if new_formula != old_formula {
-                        debug!("old formula: \"{}\", new formula: \"{}\"", old_formula, new_formula);
-                        formula.formula = new_formula;
-                    }
-                }
-            }
-        }
-    }
     pub fn move_column(&mut self, from: usize, to: usize) {
-        // Skip if from and to are the same
         if from == to {
-            return;
+            return; // Nothing to do
         }
 
         // First update all formulas to account for the move
-        self.update_formulas_for_column_move(from, to);
+        self.update_formulas_for_move(MoveType::Column, from, to);
 
         // Then perform the actual move
         for row in self.data.iter_mut() {
@@ -342,13 +290,12 @@ impl SpreadsheetSource {
     }
 
     pub fn move_row(&mut self, from: usize, to: usize) {
-        // Skip if from and to are the same
         if from == to {
-            return;
+            return; // Nothing to do
         }
 
         // First update all formulas to account for the move
-        self.update_formulas_for_row_move(from, to);
+        self.update_formulas_for_move(MoveType::Row, from, to);
 
         // Then perform the actual move
         let row = self.data.remove(from);
@@ -356,7 +303,6 @@ impl SpreadsheetSource {
 
         self.recalculate();
     }
-
 
     /// AI prompt (Clause 3.7 Sonnet):
     /// ```text
@@ -968,6 +914,11 @@ impl SpreadsheetSource {
             None
         }
     }
+}
+
+pub enum MoveType {
+    Row,
+    Column
 }
 
 impl DeferredTableDataSource for SpreadsheetSource {
