@@ -1281,7 +1281,7 @@ impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P),
 
 /// Helper method to be used by clients to help with handling column re-ordering during action processing.
 ///
-/// ```ignore
+/// ```text
 /// match action {
 ///     Action::ColumnReorder { from, to } => {
 ///         egui_deferred_table::apply_column_reordering(&mut column_ordering, from, to);
