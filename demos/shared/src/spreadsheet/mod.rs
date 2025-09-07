@@ -22,6 +22,8 @@ pub struct SpreadsheetSource {
 
 impl SpreadsheetSource {
     pub fn new() -> Self {
+        // IMPORTANT: The file `/assets/spreadsheet_demo_example.xlsx` should be synced when making changes to `data` below.
+
         let data = vec![
             vec![
                 CellValue::Value(Value::Text("Message".to_string())),
