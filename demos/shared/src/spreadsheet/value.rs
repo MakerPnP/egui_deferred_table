@@ -1,5 +1,5 @@
-use rust_decimal::Decimal;
 use crate::spreadsheet::formula::{Formula, FormulaResult};
+use rust_decimal::Decimal;
 
 #[derive(Debug)]
 pub enum CellValue {
@@ -11,13 +11,11 @@ impl CellValue {
     pub fn to_editable(&self) -> String {
         match self {
             CellValue::Calculated(formula, result) => formula.formula.clone(),
-            CellValue::Value(value) => {
-                match value {
-                    Value::Text(text) => text.clone(),
-                    Value::Decimal(decimal) => decimal.to_string(),
-                    Value::Empty => "".to_string(),
-                }
-            }
+            CellValue::Value(value) => match value {
+                Value::Text(text) => text.clone(),
+                Value::Decimal(decimal) => decimal.to_string(),
+                Value::Empty => "".to_string(),
+            },
         }
     }
 }

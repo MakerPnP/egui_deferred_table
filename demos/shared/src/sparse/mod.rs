@@ -1,10 +1,12 @@
-use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
+use egui::Color32;
+use egui_deferred_table::{
+    CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions,
+};
+use fastrand::Rng;
 use indexmap::map::IndexMap;
 use log::trace;
-use std::cell::Cell;
-use egui::Color32;
-use fastrand::Rng;
 use names::Generator;
+use std::cell::Cell;
 
 pub mod ui;
 #[derive(Debug)]
@@ -43,7 +45,11 @@ impl<V> SparseMapSource<V> {
 
     /// insert a new value at the location, returning the previous value at the location, if any.
     pub fn insert(&mut self, row_index: usize, column_index: usize, value: V) -> Option<V> {
-        let previous = self.sparse_map.entry(row_index).or_default().insert(column_index, value);
+        let previous = self
+            .sparse_map
+            .entry(row_index)
+            .or_default()
+            .insert(column_index, value);
         if previous.is_none() {
             self.extents.set(None);
         }
@@ -51,7 +57,9 @@ impl<V> SparseMapSource<V> {
     }
 
     pub fn get(&self, row_index: usize, column_index: usize) -> Option<&V> {
-        self.sparse_map.get(&row_index).and_then(|row| row.get(&column_index))
+        self.sparse_map
+            .get(&row_index)
+            .and_then(|row| row.get(&column_index))
     }
 }
 
@@ -61,23 +69,32 @@ impl<V> DeferredTableDataSource for SparseMapSource<V> {
             return extents;
         }
 
-        let extents = self.sparse_map.iter().fold(
-            None,
-            |extents, (row_number, row)|
-            {
-                let (mut max_row_index, mut max_column_index) = extents.unwrap_or((0_usize, 0_usize));
+        let extents = self
+            .sparse_map
+            .iter()
+            .fold(None, |extents, (row_number, row)| {
+                let (mut max_row_index, mut max_column_index) =
+                    extents.unwrap_or((0_usize, 0_usize));
 
-                max_column_index = max_column_index.max(row.keys().fold(0_usize, |max_column_index_for_this_row, column_index| max_column_index_for_this_row.max(*column_index)));
+                max_column_index = max_column_index.max(row.keys().fold(
+                    0_usize,
+                    |max_column_index_for_this_row, column_index| {
+                        max_column_index_for_this_row.max(*column_index)
+                    },
+                ));
                 max_row_index = max_row_index.max(*row_number);
 
                 Some((max_row_index, max_column_index))
             });
 
         let Some((max_row_index, max_column_index)) = extents else {
-            return TableDimensions::default()
+            return TableDimensions::default();
         };
 
-        trace!("recalculated extents. max_row_index: {}, max_column_index: {}", max_row_index, max_column_index);
+        trace!(
+            "recalculated extents. max_row_index: {}, max_column_index: {}",
+            max_row_index, max_column_index
+        );
 
         let extents = TableDimensions {
             row_count: max_row_index + 1,
@@ -115,7 +132,7 @@ impl DeferredTableRenderer for SparseMapSource<CellKind> {
                     ui.colored_label(Color32::LIGHT_GREEN, format!("{:.2}", value));
                 }
                 CellKind::Boolean(value) => {
-                    ui.add_enabled_ui(false, |ui|{
+                    ui.add_enabled_ui(false, |ui| {
                         let mut value = *value;
                         ui.add(egui::Checkbox::without_text(&mut value));
                     });
@@ -134,18 +151,23 @@ pub enum CellKindChoice {
     Text,
 }
 
-
 #[cfg(test)]
 mod sparse_map_source_tests {
-    use egui_deferred_table::{DeferredTableDataSource, TableDimensions};
     use super::SparseMapSource;
+    use egui_deferred_table::{DeferredTableDataSource, TableDimensions};
 
     #[test]
     pub fn dimensions_for_empty_source() {
         // given
         let source = SparseMapSource::<usize>::new();
         // when
-        assert_eq!(source.get_dimensions(), TableDimensions { row_count: 0, column_count: 0 });
+        assert_eq!(
+            source.get_dimensions(),
+            TableDimensions {
+                row_count: 0,
+                column_count: 0
+            }
+        );
     }
 
     #[test]
@@ -156,7 +178,13 @@ mod sparse_map_source_tests {
         source.insert(0, 1, 69);
 
         // when
-        assert_eq!(source.get_dimensions(), TableDimensions { row_count: 1, column_count: 2 });
+        assert_eq!(
+            source.get_dimensions(),
+            TableDimensions {
+                row_count: 1,
+                column_count: 2
+            }
+        );
     }
 
     #[test]
@@ -167,7 +195,13 @@ mod sparse_map_source_tests {
         source.insert(1, 0, 69);
 
         // when
-        assert_eq!(source.get_dimensions(), TableDimensions { row_count: 2, column_count: 1 });
+        assert_eq!(
+            source.get_dimensions(),
+            TableDimensions {
+                row_count: 2,
+                column_count: 1
+            }
+        );
     }
 
     #[test]
@@ -181,7 +215,13 @@ mod sparse_map_source_tests {
         source.insert(1, 1, 0x69);
 
         // when
-        assert_eq!(source.get_dimensions(), TableDimensions { row_count: 2, column_count: 2 });
+        assert_eq!(
+            source.get_dimensions(),
+            TableDimensions {
+                row_count: 2,
+                column_count: 2
+            }
+        );
     }
 
     #[test]
@@ -196,23 +236,34 @@ mod sparse_map_source_tests {
         source.insert(9, 4, 0x69);
 
         // when
-        assert_eq!(source.get_dimensions(), TableDimensions { row_count: 10, column_count: 10 });
+        assert_eq!(
+            source.get_dimensions(),
+            TableDimensions {
+                row_count: 10,
+                column_count: 10
+            }
+        );
     }
 }
 
-
-pub fn generate_data(data: &mut SparseMapSource<CellKind>, max_rows: usize, max_columns: usize, max_cell_values: usize, rng: &mut Rng, name_gen: &mut Generator) {
-
+pub fn generate_data(
+    data: &mut SparseMapSource<CellKind>,
+    max_rows: usize,
+    max_columns: usize,
+    max_cell_values: usize,
+    rng: &mut Rng,
+    name_gen: &mut Generator,
+) {
     (0..max_cell_values).for_each(|_index| {
         let row_index = rng.usize(0..max_rows);
         let column_index = rng.usize(0..max_columns);
 
         let kind = rng.usize(0..3);
-        let cell_kind= match kind {
+        let cell_kind = match kind {
             0 => CellKind::Float(rng.f32()),
             1 => CellKind::Boolean(rng.bool()),
             2 => CellKind::Text(name_gen.next().unwrap()),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         data.insert(row_index, column_index, cell_kind);

@@ -1,5 +1,5 @@
-pub mod spreadsheet;
 pub mod sparse;
+pub mod spreadsheet;
 
 pub mod growing;
 

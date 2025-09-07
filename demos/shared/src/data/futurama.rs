@@ -15,16 +15,15 @@ impl Display for Kind {
     }
 }
 
-
 pub type RowType = (
-    String,            // Character name
-    Kind,              // Character kind
-    String,            // Planet of origin
-    String,            // Notes
-    String,            // Voice actor
-    u32,               // First appearance (episode)
-    u32,               // Last appearance (episode)
-    u32,               // Number of appearances
+    String, // Character name
+    Kind,   // Character kind
+    String, // Planet of origin
+    String, // Notes
+    String, // Voice actor
+    u32,    // First appearance (episode)
+    u32,    // Last appearance (episode)
+    u32,    // Number of appearances
 );
 
 pub fn fields() -> Vec<&'static str> {
@@ -36,7 +35,7 @@ pub fn fields() -> Vec<&'static str> {
         "Voice Actor",
         "First Appearance",
         "Last Appearance",
-        "Appearances"
+        "Appearances",
     ]
 }
 
@@ -427,7 +426,8 @@ pub fn characters() -> Vec<RowType> {
             "Wernstrom".to_string(),
             Kind::Human,
             "Earth".to_string(),
-            "Professor Farnsworth's academic rival, swore revenge over a 0.1 point deduction".to_string(),
+            "Professor Farnsworth's academic rival, swore revenge over a 0.1 point deduction"
+                .to_string(),
             "David Herman".to_string(),
             8,
             136,

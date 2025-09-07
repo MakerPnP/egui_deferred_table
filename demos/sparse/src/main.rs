@@ -38,7 +38,7 @@ impl eframe::App for MyApp {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             self.top_panel_content(ui);
         });
-        
+
         egui::SidePanel::left("left_panel").show(ctx, |ui| {
             self.left_panel_content(ui);
         });
@@ -59,35 +59,33 @@ impl eframe::App for MyApp {
 
 impl MyApp {
     fn left_panel_content(&mut self, ui: &mut Ui) {
-        egui::ScrollArea::both()
-            .show(ui, |ui| {
-                ui.label("Pan and scroll using mouse or scrollbars.");
-                ui.label("Use the form to modify cells.");
-                ui.label("The table adjusts dynamically as sparse data source is changed.");
-                ui.label("For high performance, only the visible cells are rendered.");
-            });
+        egui::ScrollArea::both().show(ui, |ui| {
+            ui.label("Pan and scroll using mouse or scrollbars.");
+            ui.label("Use the form to modify cells.");
+            ui.label("The table adjusts dynamically as sparse data source is changed.");
+            ui.label("For high performance, only the visible cells are rendered.");
+        });
     }
 
     fn central_panel_content(&mut self, ui: &mut Ui) {
         let state = &mut self.state;
 
         shared::sparse::ui::show_controls(ui, state);
-        
+
         ui.separator();
-        
+
         egui::Resize::default()
             .min_size((100.0, 100.0))
             .default_size((640.0, 480.0))
             .max_size((1024.0, 768.0))
             .show(ui, |ui| {
-
                 let (_response, actions) = shared::sparse::ui::show_table(ui, state);
 
                 shared::sparse::ui::handle_actions(actions, state);
             });
 
         ui.separator();
-        
+
         ui.label("content below");
     }
 

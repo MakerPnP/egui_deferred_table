@@ -1,16 +1,18 @@
+use crate::spreadsheet::formula::{Formula, FormulaResult};
+use crate::spreadsheet::value::{CellValue, Value};
 ///
 ///
 use egui::Ui;
+use egui_deferred_table::{
+    CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions,
+};
 use log::{debug, trace};
 use rust_decimal::Decimal;
-use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
 use rust_decimal_macros::dec;
-use crate::spreadsheet::formula::{Formula, FormulaResult};
-use crate::spreadsheet::value::{CellValue, Value};
 
+pub mod formula;
 pub mod ui;
 pub mod value;
-pub mod formula;
 
 pub struct SpreadsheetSource {
     data: Vec<Vec<CellValue>>,
@@ -43,11 +45,17 @@ impl SpreadsheetSource {
                 CellValue::Value(Value::Text("Total".to_string())),
                 CellValue::Calculated(Formula::new("=B2+B3".to_string()), FormulaResult::Pending),
                 CellValue::Calculated(Formula::new("=C2+C3".to_string()), FormulaResult::Pending),
-                CellValue::Calculated(Formula::new("=(B4+C4)+(D2+D3)".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(
+                    Formula::new("=(B4+C4)+(D2+D3)".to_string()),
+                    FormulaResult::Pending,
+                ),
             ],
             vec![
                 CellValue::Value(Value::Text("Factor".to_string())),
-                CellValue::Calculated(Formula::new("=5+(10/2)".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(
+                    Formula::new("=5+(10/2)".to_string()),
+                    FormulaResult::Pending,
+                ),
                 CellValue::Calculated(Formula::new("=B5*0.5".to_string()), FormulaResult::Pending),
                 CellValue::Value(Value::Empty),
             ],
@@ -56,13 +64,19 @@ impl SpreadsheetSource {
                 //CellValue::Value(Value::Empty),
                 CellValue::Value(Value::Empty),
                 CellValue::Value(Value::Text("Final Result".to_string())),
-                CellValue::Calculated(Formula::new("=C5+(B4*C4)*(D2*D3)/D4".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(
+                    Formula::new("=C5+(B4*C4)*(D2*D3)/D4".to_string()),
+                    FormulaResult::Pending,
+                ),
             ],
             vec![
                 CellValue::Value(Value::Text("Circular Refs".to_string())),
                 CellValue::Calculated(Formula::new("=B7".to_string()), FormulaResult::Pending),
                 CellValue::Calculated(Formula::new("=B7*2".to_string()), FormulaResult::Pending),
-                CellValue::Calculated(Formula::new("=(C7*2)+D6".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(
+                    Formula::new("=(C7*2)+D6".to_string()),
+                    FormulaResult::Pending,
+                ),
             ],
             vec![
                 CellValue::Value(Value::Text("Errors 1".to_string())),
@@ -97,7 +111,7 @@ impl SpreadsheetSource {
             row.push(CellValue::Value(Value::Empty));
         }
     }
-    
+
     pub fn add_row(&mut self) {
         let dimension = self.get_dimensions();
         let row = (0..dimension.column_count)
@@ -246,7 +260,11 @@ impl SpreadsheetSource {
                                             (
                                                 true,
                                                 dep.clone(),
-                                                format!("{}{}", Self::make_column_name(dep_col), new_row + 1)
+                                                format!(
+                                                    "{}{}",
+                                                    Self::make_column_name(dep_col),
+                                                    new_row + 1
+                                                ),
                                             )
                                         } else {
                                             (false, String::new(), String::new())
@@ -254,14 +272,18 @@ impl SpreadsheetSource {
                                     } else {
                                         (false, String::new(), String::new())
                                     }
-                                },
+                                }
                                 MoveType::Column => {
                                     if let Some(&new_col) = index_mapping.get(&dep_col) {
                                         if new_col != dep_col {
                                             (
                                                 true,
                                                 dep.clone(),
-                                                format!("{}{}", Self::make_column_name(new_col), dep_row + 1)
+                                                format!(
+                                                    "{}{}",
+                                                    Self::make_column_name(new_col),
+                                                    dep_row + 1
+                                                ),
                                             )
                                         } else {
                                             (false, String::new(), String::new())
@@ -306,7 +328,10 @@ impl SpreadsheetSource {
 
                     // Update the formula if it changed
                     if new_formula != old_formula {
-                        debug!("old formula: \"{}\", new formula: \"{}\"", old_formula, new_formula);
+                        debug!(
+                            "old formula: \"{}\", new formula: \"{}\"",
+                            old_formula, new_formula
+                        );
                         formula.formula = new_formula;
                     }
                 }
@@ -380,7 +405,8 @@ impl SpreadsheetSource {
         self.recalculation_required = false;
 
         // Step 1: Build dependency graph
-        let mut dependencies: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        let mut dependencies: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
         let mut cells_with_formulas: Vec<(usize, usize, &Formula)> = Vec::new();
 
         // Collect all cells with formulas and build initial dependency map
@@ -413,15 +439,16 @@ impl SpreadsheetSource {
             trace!("{} depends on: {:?}", cell, deps);
         }
 
-
         // Step 2: Create a reversed dependency graph (dependency -> dependents)
-        let mut reversed_deps: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        let mut reversed_deps: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
         let mut missing_deps = std::collections::HashSet::new();
 
         // First pass: build the reversed deps and collect missing dependencies
         for (cell, deps) in &dependencies {
             for dep in deps {
-                reversed_deps.entry(dep.clone())
+                reversed_deps
+                    .entry(dep.clone())
                     .or_insert_with(Vec::new)
                     .push(cell.clone());
 
@@ -456,7 +483,7 @@ impl SpreadsheetSource {
                     &dependencies,
                     &mut visited,
                     &mut temp_visited,
-                    &mut calculation_order
+                    &mut calculation_order,
                 ) {
                     has_cycles = true;
                     // Mark cells in cycles with errors
@@ -504,7 +531,8 @@ impl SpreadsheetSource {
                         }
 
                         // Update the cell with the result
-                        if let CellValue::Calculated(formula, old_result) = &mut self.data[row][col] {
+                        if let CellValue::Calculated(formula, old_result) = &mut self.data[row][col]
+                        {
                             *old_result = result;
                         }
                     }
@@ -562,7 +590,7 @@ impl SpreadsheetSource {
         graph: &std::collections::HashMap<String, Vec<String>>,
         visited: &mut std::collections::HashSet<String>,
         temp_visited: &mut std::collections::HashSet<String>,
-        result: &mut Vec<String>
+        result: &mut Vec<String>,
     ) -> bool {
         if temp_visited.contains(node) {
             return true; // Cycle detected
@@ -651,7 +679,7 @@ impl SpreadsheetSource {
     fn evaluate_formula(
         &self,
         formula: &Formula,
-        calculated_values: &std::collections::HashMap<String, Value>
+        calculated_values: &std::collections::HashMap<String, Value>,
     ) -> FormulaResult {
         trace!("Evaluating formula: {}", formula.formula);
 
@@ -670,7 +698,7 @@ impl SpreadsheetSource {
     fn evaluate_expression(
         &self,
         expression: &str,
-        calculated_values: &std::collections::HashMap<String, Value>
+        calculated_values: &std::collections::HashMap<String, Value>,
     ) -> FormulaResult {
         let expression = expression.trim();
 
@@ -702,7 +730,7 @@ impl SpreadsheetSource {
                     }
                     paren_level += 1;
                     tokens.push("(".to_string());
-                },
+                }
                 ')' => {
                     if !current_token.is_empty() {
                         tokens.push(current_token.clone());
@@ -716,7 +744,7 @@ impl SpreadsheetSource {
                     } else {
                         tokens.push(")".to_string());
                     }
-                },
+                }
                 '+' | '-' | '*' | '/' | '%' => {
                     if !current_token.is_empty() {
                         tokens.push(current_token.clone());
@@ -724,14 +752,14 @@ impl SpreadsheetSource {
                     }
                     tokens.push(c.to_string());
                     in_cell_ref = false;
-                },
+                }
                 ' ' | '\t' | '\n' => {
                     if !current_token.is_empty() {
                         tokens.push(current_token.clone());
                         current_token.clear();
                     }
                     in_cell_ref = false;
-                },
+                }
                 _ => {
                     // Start of a cell reference or number
                     if !in_cell_ref && c.is_ascii_alphabetic() {
@@ -754,7 +782,7 @@ impl SpreadsheetSource {
     fn evaluate_tokens(
         &self,
         tokens: &[String],
-        calculated_values: &std::collections::HashMap<String, Value>
+        calculated_values: &std::collections::HashMap<String, Value>,
     ) -> FormulaResult {
         if tokens.is_empty() {
             return FormulaResult::Error("#EMPTY_EXPRESSION".to_string());
@@ -784,7 +812,7 @@ impl SpreadsheetSource {
                 }
 
                 // Extract the sub-expression within the parentheses
-                let sub_expr_tokens = &tokens[(i+1)..(j-1)];
+                let sub_expr_tokens = &tokens[(i + 1)..(j - 1)];
 
                 // Evaluate the sub-expression
                 let sub_result = self.evaluate_tokens(sub_expr_tokens, calculated_values);
@@ -794,9 +822,9 @@ impl SpreadsheetSource {
                         processed_tokens.push(match value {
                             Value::Decimal(d) => d.to_string(),
                             Value::Text(t) => t,
-                            Value::Empty => "".to_string()
+                            Value::Empty => "".to_string(),
                         });
-                    },
+                    }
                     _ => return sub_result,
                 }
 
@@ -817,7 +845,7 @@ impl SpreadsheetSource {
     fn evaluate_simple_expression(
         &self,
         tokens: &[String],
-        calculated_values: &std::collections::HashMap<String, Value>
+        calculated_values: &std::collections::HashMap<String, Value>,
     ) -> FormulaResult {
         if tokens.is_empty() {
             return FormulaResult::Error("#EMPTY_EXPRESSION".to_string());
@@ -828,10 +856,16 @@ impl SpreadsheetSource {
             let token = &tokens[0];
 
             // Check if it's a cell reference
-            if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
-                return self.get_cell_value_by_ref(token, calculated_values)
-                    .map_or(FormulaResult::Error("#REF".to_string()),
-                            |v| FormulaResult::Value(v));
+            if token
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_alphabetic())
+            {
+                return self
+                    .get_cell_value_by_ref(token, calculated_values)
+                    .map_or(FormulaResult::Error("#REF".to_string()), |v| {
+                        FormulaResult::Value(v)
+                    });
             }
 
             // Check if it's a number
@@ -848,24 +882,34 @@ impl SpreadsheetSource {
         let mut values = Vec::new();
         let mut operators = Vec::new();
 
-
         // Track if we're expecting an operand or operator
         let mut expect_operand = true;
 
         for token in tokens {
             if expect_operand {
                 // Parse operand (cell reference or number)
-                let value = if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                let value = if token
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_ascii_alphabetic())
+                {
                     // It's a cell reference
                     match self.get_cell_value_by_ref(token, calculated_values) {
                         Some(Value::Decimal(d)) => d,
-                        _ => return FormulaResult::Error(format!("#REF_OR_TYPE_MISMATCH: {}", token)),
+                        _ => {
+                            return FormulaResult::Error(format!(
+                                "#REF_OR_TYPE_MISMATCH: {}",
+                                token
+                            ));
+                        }
                     }
                 } else {
                     // It's a number
                     match token.parse::<rust_decimal::Decimal>() {
                         Ok(num) => num,
-                        Err(_) => return FormulaResult::Error(format!("#INVALID_NUMBER: {}", token)),
+                        Err(_) => {
+                            return FormulaResult::Error(format!("#INVALID_NUMBER: {}", token));
+                        }
                     }
                 };
 
@@ -877,7 +921,7 @@ impl SpreadsheetSource {
                     "+" | "-" | "*" | "/" | "%" => {
                         operators.push(token.clone());
                         expect_operand = true;
-                    },
+                    }
                     _ => return FormulaResult::Error(format!("#EXPECTED_OPERATOR_GOT: {}", token)),
                 }
             }
@@ -899,13 +943,13 @@ impl SpreadsheetSource {
                             return FormulaResult::Error("#DIV_BY_ZERO".to_string());
                         }
                         values[i] / values[i + 1]
-                    },
+                    }
                     "%" => {
                         if values[i + 1].is_zero() {
                             return FormulaResult::Error("#DIV_BY_ZERO".to_string());
                         }
                         values[i] % values[i + 1]
-                    },
+                    }
                     _ => unreachable!(), // We've already filtered for valid operators
                 };
 
@@ -914,7 +958,10 @@ impl SpreadsheetSource {
                 values.remove(i + 1);
                 operators.remove(i);
 
-                trace!("After processing * / %: values={:?}, operators={:?}", values, operators);
+                trace!(
+                    "After processing * / %: values={:?}, operators={:?}",
+                    values, operators
+                );
             } else {
                 i += 1; // Move to next operator
             }
@@ -933,7 +980,10 @@ impl SpreadsheetSource {
             values.remove(1);
             operators.remove(0);
 
-            trace!("After processing + -: values={:?}, operators={:?}", values, operators);
+            trace!(
+                "After processing + -: values={:?}, operators={:?}",
+                values, operators
+            );
         }
 
         // The final result should be the only value left
@@ -945,7 +995,7 @@ impl SpreadsheetSource {
     fn get_cell_value_by_ref(
         &self,
         cell_ref: &str,
-        calculated_values: &std::collections::HashMap<String, Value>
+        calculated_values: &std::collections::HashMap<String, Value>,
     ) -> Option<Value> {
         // If the value is already calculated, return it
         if let Some(value) = calculated_values.get(cell_ref) {
@@ -971,19 +1021,17 @@ impl SpreadsheetSource {
 
 pub enum MoveType {
     Row,
-    Column
+    Column,
 }
 
 impl DeferredTableDataSource for SpreadsheetSource {
     fn get_dimensions(&self) -> TableDimensions {
         let rows = self.data.len();
-        let columns = self.data.iter().fold(0, |acc, row| {
-            row.len().max(acc)
-        });
+        let columns = self.data.iter().fold(0, |acc, row| row.len().max(acc));
 
         TableDimensions {
             row_count: rows,
-            column_count: columns
+            column_count: columns,
         }
     }
 }
@@ -993,26 +1041,22 @@ impl DeferredTableRenderer for SpreadsheetSource {
         let possible_value = self.get_cell_value(cell_index);
         match possible_value {
             None => {}
-            Some(value) => {
-                match value {
-                    CellValue::Calculated(formula, result) => {
-                        match result {
-                            FormulaResult::Pending => {
-                                self.render_pending(ui);
-                            }
-                            FormulaResult::Value(value) => {
-                                self.render_value(ui, value);
-                            }
-                            FormulaResult::Error(message) => {
-                                self.render_error(ui, message);
-                            }
-                        }
+            Some(value) => match value {
+                CellValue::Calculated(formula, result) => match result {
+                    FormulaResult::Pending => {
+                        self.render_pending(ui);
                     }
-                    CellValue::Value(value) => {
+                    FormulaResult::Value(value) => {
                         self.render_value(ui, value);
                     }
+                    FormulaResult::Error(message) => {
+                        self.render_error(ui, message);
+                    }
+                },
+                CellValue::Value(value) => {
+                    self.render_value(ui, value);
                 }
-            }
+            },
         }
     }
 }

@@ -1,13 +1,15 @@
 use chrono::{DateTime, Local};
 use egui::Ui;
+use egui_deferred_table::{
+    CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions,
+};
 use log::{debug, trace};
-use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
 
 pub mod ui;
 
 enum CellState<T> {
     Loading,
-    Ready(T)
+    Ready(T),
 }
 
 impl<T> Default for CellState<T> {
@@ -17,8 +19,7 @@ impl<T> Default for CellState<T> {
 }
 
 enum CellValue {
-    String(String)
-    //...
+    String(String), //...
 }
 
 struct GrowingSource<T> {
@@ -28,15 +29,13 @@ struct GrowingSource<T> {
 }
 
 enum Operations {
-    Grow
+    Grow,
 }
 
 impl<T> GrowingSource<T> {
     pub fn dimensions(&self) -> (usize, usize) {
         let rows = self.data.len();
-        let columns = self.data.iter().fold(0, |acc, row| {
-            row.len().max(acc)
-        });
+        let columns = self.data.iter().fold(0, |acc, row| row.len().max(acc));
 
         (rows, columns)
     }
@@ -45,11 +44,14 @@ impl<T> GrowingSource<T> {
 impl<V> GrowingSource<CellState<V>> {
     /// grow the source by rows/columns
     pub fn grow(&mut self, row_count: usize, column_count: usize) {
-
         let (existing_rows, existing_columns) = self.dimensions();
-        let (total_rows, total_columns) = (existing_rows + row_count, existing_columns + column_count);
+        let (total_rows, total_columns) =
+            (existing_rows + row_count, existing_columns + column_count);
 
-        debug!("existing_rows: {}, existing_columns: {}, total_rows: {}, total_columns: {}", existing_rows, existing_columns, total_rows, total_columns);
+        debug!(
+            "existing_rows: {}, existing_columns: {}, total_rows: {}, total_columns: {}",
+            existing_rows, existing_columns, total_rows, total_columns
+        );
         for row_index in 0..total_rows {
             let is_new_row = row_index >= existing_rows;
             if is_new_row {
@@ -64,7 +66,8 @@ impl<V> GrowingSource<CellState<V>> {
             }
         }
 
-        self.pending_operations.push((Local::now(), Operations::Grow));
+        self.pending_operations
+            .push((Local::now(), Operations::Grow));
         // here you could trigger a 'load' on another thread
     }
 }
@@ -76,13 +79,12 @@ impl<T: Default> Default for GrowingSource<T> {
             last_accessed_at: now,
             pending_operations: vec![],
 
-            data: vec![]
+            data: vec![],
         }
     }
 }
 
 impl GrowingSource<CellState<CellValue>> {
-
     pub fn get_cell_value(&self, cell_index: CellIndex) -> Option<&CellState<CellValue>> {
         let row_values = &self.data[cell_index.row];
 
@@ -104,14 +106,12 @@ impl GrowingSource<CellState<CellValue>> {
         let pending_operations = std::mem::take(&mut self.pending_operations);
 
         // Partition into operations to process and operations to keep
-        let (to_process, to_keep): (Vec<_>, Vec<_>) = pending_operations.into_iter()
-            .partition(|(time, operation)| {
-                match operation {
-                    Operations::Grow => {
-                        now.signed_duration_since(time).num_milliseconds() > 500
-                    }
-                }
-            });
+        let (to_process, to_keep): (Vec<_>, Vec<_>) =
+            pending_operations
+                .into_iter()
+                .partition(|(time, operation)| match operation {
+                    Operations::Grow => now.signed_duration_since(time).num_milliseconds() > 500,
+                });
 
         // Restore operations to keep
         self.pending_operations = to_keep;
@@ -126,21 +126,17 @@ impl GrowingSource<CellState<CellValue>> {
         }
     }
 
-
     fn simulate_background_loading(&mut self) {
         // fill-in random data in all cells with `Loading` state
 
         let (rows, _columns) = self.dimensions();
 
         for row in self.data.iter_mut().take(rows) {
-            for value in row.iter_mut()
-                .filter(|it| matches!(it, CellState::Loading))
-            {
+            for value in row.iter_mut().filter(|it| matches!(it, CellState::Loading)) {
                 *value = CellState::Ready(CellValue::String("test".to_string()));
             }
         }
     }
-
 }
 
 impl DeferredTableDataSource for GrowingSource<CellState<CellValue>> {
@@ -160,7 +156,7 @@ impl DeferredTableDataSource for GrowingSource<CellState<CellValue>> {
 
         TableDimensions {
             row_count: rows,
-            column_count: columns
+            column_count: columns,
         }
     }
 }
@@ -175,13 +171,11 @@ impl DeferredTableRenderer for GrowingSource<CellState<CellValue>> {
             CellState::Loading => {
                 ui.spinner();
             }
-            CellState::Ready(value) => {
-                match value {
-                    CellValue::String(s) => {
-                        ui.label(s);
-                    }
+            CellState::Ready(value) => match value {
+                CellValue::String(s) => {
+                    ui.label(s);
                 }
-            }
+            },
         }
     }
 }
