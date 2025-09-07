@@ -1,9 +1,12 @@
 use egui::Ui;
 use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
-use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use crate::spreadsheet::formula::{Formula, FormulaResult};
+use crate::spreadsheet::value::{CellValue, Value};
 
 pub mod ui;
+pub mod value;
+pub mod formula;
 
 pub struct SpreadsheetSource {
     data: Vec<Vec<Value>>,
@@ -107,13 +110,15 @@ impl SpreadsheetSource {
             row.insert(to, value);
         }
 
+        // FUTURE update formulas
         // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
     }
 
     pub fn move_row(&mut self, from: usize, to: usize) {
         let row = self.data.remove(from);
         self.data.insert(to, row);
-        
+
+        // FUTURE update formulas
         // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
     }
 
@@ -157,30 +162,4 @@ impl DeferredTableRenderer for SpreadsheetSource {
             }
         }
     }
-}
-
-pub enum CellValue {
-    Calculated(Formula, FormulaResult),
-    Value(Value),
-}
-
-#[derive(Clone)]
-pub enum Value {
-    Text(String),
-    Decimal(Decimal),
-}
-
-pub struct Formula {
-    formula: String,
-}
-
-impl Formula {
-    fn new(formula: String) -> Self {
-        Self { formula }
-    }
-}
-
-pub enum FormulaResult {
-    Value(Value),
-    Error(String),
 }
