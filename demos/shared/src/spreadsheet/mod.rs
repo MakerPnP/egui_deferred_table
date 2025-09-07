@@ -531,7 +531,8 @@ impl SpreadsheetSource {
                         }
 
                         // Update the cell with the result
-                        if let CellValue::Calculated(formula, old_result) = &mut self.data[row][col]
+                        if let CellValue::Calculated(_formula, old_result) =
+                            &mut self.data[row][col]
                         {
                             *old_result = result;
                         }
@@ -1042,7 +1043,7 @@ impl DeferredTableRenderer for SpreadsheetSource {
         match possible_value {
             None => {}
             Some(value) => match value {
-                CellValue::Calculated(formula, result) => match result {
+                CellValue::Calculated(_formula, result) => match result {
                     FormulaResult::Pending => {
                         self.render_pending(ui);
                     }

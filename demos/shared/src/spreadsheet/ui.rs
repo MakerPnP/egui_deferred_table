@@ -17,7 +17,7 @@ impl SpreadsheetState {
     }
 
     pub fn needs_recalculation(&self) -> bool {
-        self.data_source.recalculation_required
+        self.data_source.requires_recalculation()
     }
 
     pub fn recalculate(&mut self) {
