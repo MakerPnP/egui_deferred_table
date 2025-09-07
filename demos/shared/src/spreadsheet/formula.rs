@@ -5,12 +5,13 @@ pub struct Formula {
 }
 
 impl Formula {
-    fn new(formula: String) -> Self {
+    pub fn new(formula: String) -> Self {
         Self { formula }
     }
 }
 
 pub enum FormulaResult {
+    Pending,
     Value(Value),
     Error(String),
 }

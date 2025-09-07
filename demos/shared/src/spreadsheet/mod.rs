@@ -9,29 +9,29 @@ pub mod value;
 pub mod formula;
 
 pub struct SpreadsheetSource {
-    data: Vec<Vec<Value>>,
+    data: Vec<Vec<CellValue>>,
 }
 
 impl SpreadsheetSource {
     pub fn new() -> Self {
         let data = vec![
             vec![
-                Value::Text("Message".to_string()),
-                Value::Text("Value 1".to_string()),
-                Value::Text("Value 2".to_string()),
-                Value::Text("Result".to_string()),
+                CellValue::Value(Value::Text("Message".to_string())),
+                CellValue::Value(Value::Text("Value 1".to_string())),
+                CellValue::Value(Value::Text("Value 2".to_string())),
+                CellValue::Value(Value::Text("Result".to_string())),
             ],
             vec![
-                Value::Text("Hello World".to_string()),
-                Value::Decimal(dec!(42.0)),
-                Value::Decimal(dec!(69.0)),
-                Value::Text("=B2+C2".to_string())
+                CellValue::Value(Value::Text("Hello World".to_string())),
+                CellValue::Value(Value::Decimal(dec!(42.0))),
+                CellValue::Value(Value::Decimal(dec!(69.0))),
+                CellValue::Calculated(Formula::new("=B2+C2".to_string()), FormulaResult::Pending)
             ],
             vec![
-                Value::Text("Example data".to_string()),
-                Value::Decimal(dec!(6.0)),
-                Value::Decimal(dec!(9.0)),
-                Value::Text("=B3+C3".to_string())
+                CellValue::Value(Value::Text("Example data".to_string())),
+                CellValue::Value(Value::Decimal(dec!(6.0))),
+                CellValue::Value(Value::Decimal(dec!(9.0))),
+                CellValue::Calculated(Formula::new("=B3+C3".to_string()), FormulaResult::Pending)
             ],
 
         ];
@@ -45,27 +45,15 @@ impl SpreadsheetSource {
         FormulaResult::Error("#NOT_IMPLEMENTED".to_string())
     }
 
-    fn build_value(&self, value: Value) -> CellValue {
-        match value {
-            Value::Text(text) => {
-                if text.starts_with("=") {
-                    let formula = Formula::new(text);
-                    let result = self.calculate_value(&formula);
-
-                    CellValue::Calculated(formula, result)
-                } else {
-                    CellValue::Value(Value::Text(text))
-                }
-            }
-            value @ Value::Decimal(_) => CellValue::Value(value)
-        }
+    pub fn render_spinner(&self, ui: &mut Ui) {
+        ui.spinner();
     }
 
-    pub fn render_error(&self, ui: &mut Ui, message: String) {
-        ui.colored_label(egui::Color32::RED, &message);
+    pub fn render_error(&self, ui: &mut Ui, message: &String) {
+        ui.colored_label(egui::Color32::RED, message);
     }
 
-    pub fn render_value(&self, ui: &mut Ui, value: Value) {
+    pub fn render_value(&self, ui: &mut Ui, value: &Value) {
         match value {
             Value::Text(text) => {
                 ui.label(text);
@@ -76,11 +64,10 @@ impl SpreadsheetSource {
         }
     }
 
-    pub fn get_cell_value(&self, cell_index: CellIndex) -> Option<CellValue> {
+    pub fn get_cell_value(&self, cell_index: CellIndex) -> Option<&CellValue> {
         let row_values = &self.data[cell_index.row];
 
-        let cell_value = row_values.get(cell_index.column)
-            .map(|value| self.build_value(value.clone()));
+        let cell_value = row_values.get(cell_index.column);
 
         cell_value
     }
@@ -111,7 +98,8 @@ impl SpreadsheetSource {
         }
 
         // FUTURE update formulas
-        // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
+
+        self.recalculate();
     }
 
     pub fn move_row(&mut self, from: usize, to: usize) {
@@ -119,9 +107,13 @@ impl SpreadsheetSource {
         self.data.insert(to, row);
 
         // FUTURE update formulas
-        // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
+
+        self.recalculate();
     }
 
+    pub fn recalculate(&mut self) {
+        // TODO
+    }
 }
 
 impl DeferredTableDataSource for SpreadsheetSource {
@@ -147,6 +139,9 @@ impl DeferredTableRenderer for SpreadsheetSource {
                 match value {
                     CellValue::Calculated(formula, result) => {
                         match result {
+                            FormulaResult::Pending => {
+                                self.render_spinner(ui);
+                            }
                             FormulaResult::Value(value) => {
                                 self.render_value(ui, value);
                             }
