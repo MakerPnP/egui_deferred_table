@@ -1,5 +1,6 @@
 use crate::spreadsheet::value::Value;
 
+#[derive(Debug)]
 pub struct Formula {
     pub(crate) formula: String,
 }
@@ -10,6 +11,7 @@ impl Formula {
     }
 }
 
+#[derive(Debug)]
 pub enum FormulaResult {
     Pending,
     Value(Value),

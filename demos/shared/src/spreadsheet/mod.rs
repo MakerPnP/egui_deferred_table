@@ -39,13 +39,43 @@ impl SpreadsheetSource {
                 CellValue::Value(Value::Text("Total".to_string())),
                 CellValue::Calculated(Formula::new("=B2+B3".to_string()), FormulaResult::Pending),
                 CellValue::Calculated(Formula::new("=C2+C3".to_string()), FormulaResult::Pending),
-                CellValue::Calculated(Formula::new("=D2+D3".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=(B4+C4)+(D2+D3)".to_string()), FormulaResult::Pending),
             ],
             vec![
                 CellValue::Value(Value::Text("Factor".to_string())),
                 CellValue::Calculated(Formula::new("=5+(10/2)".to_string()), FormulaResult::Pending),
-                CellValue::Calculated(Formula::new("=B5*2".to_string()), FormulaResult::Pending),
-                CellValue::Calculated(Formula::new("=C5+(D2*D3*D4)".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=B5*0.5".to_string()), FormulaResult::Pending),
+                CellValue::Value(Value::Empty),
+            ],
+            vec![
+                CellValue::Value(Value::Empty),
+                CellValue::Value(Value::Empty),
+                CellValue::Value(Value::Text("Final Result".to_string())),
+                CellValue::Calculated(Formula::new("=C5+(B4*C4)*(D2*D3)/D4".to_string()), FormulaResult::Pending),
+            ],
+            vec![
+                CellValue::Value(Value::Text("Circular Refs".to_string())),
+                CellValue::Calculated(Formula::new("=B7".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=B7*2".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=(C7*2)+D6".to_string()), FormulaResult::Pending),
+            ],
+            vec![
+                CellValue::Value(Value::Text("Errors 1".to_string())),
+                CellValue::Calculated(Formula::new("X".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=X".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=A1*2".to_string()), FormulaResult::Pending),
+            ],
+            vec![
+                CellValue::Value(Value::Text("Errors 2".to_string())),
+                CellValue::Calculated(Formula::new("=(A1".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=1*£".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=1/0".to_string()), FormulaResult::Pending),
+            ],
+            vec![
+                CellValue::Value(Value::Text("Errors 3".to_string())),
+                CellValue::Calculated(Formula::new("=1£".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=1%0".to_string()), FormulaResult::Pending),
             ],
         ];
 
@@ -70,6 +100,7 @@ impl SpreadsheetSource {
             Value::Decimal(decimal) => {
                 ui.label(decimal.to_string());
             }
+            Value::Empty => {}
         }
     }
 
@@ -172,16 +203,52 @@ impl SpreadsheetSource {
             }
         }
 
-        // Step 2: Detect circular dependencies and create calculation order
+        // Debug: print dependencies
+        println!("Dependencies:");
+        for (cell, deps) in &dependencies {
+            println!("{} depends on: {:?}", cell, deps);
+        }
+
+
+        // Step 2: Create a reversed dependency graph (dependency -> dependents)
+        let mut reversed_deps: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        let mut missing_deps = std::collections::HashSet::new();
+
+        // First pass: build the reversed deps and collect missing dependencies
+        for (cell, deps) in &dependencies {
+            for dep in deps {
+                reversed_deps.entry(dep.clone())
+                    .or_insert_with(Vec::new)
+                    .push(cell.clone());
+
+                // Collect dependencies that don't have an entry yet
+                if !dependencies.contains_key(dep) {
+                    missing_deps.insert(dep.clone());
+                }
+            }
+        }
+
+        // Second pass: add missing dependencies
+        for dep in missing_deps {
+            dependencies.insert(dep, Vec::new());
+        }
+
+        // Debug: print reversed dependencies
+        println!("Reversed Dependencies:");
+        for (cell, deps) in &reversed_deps {
+            println!("{} is used by: {:?}", cell, deps);
+        }
+        // Step 3: Perform topological sort to determine calculation order
         let mut calculation_order = Vec::new();
         let mut visited = std::collections::HashSet::new();
         let mut temp_visited = std::collections::HashSet::new();
-        let mut has_cycles = false;
 
-        for cell in dependencies.keys() {
-            if !visited.contains(cell) {
+        // Perform topological sort on all nodes
+        let mut has_cycles = false;
+        for cell in dependencies.keys().cloned().collect::<Vec<_>>() {
+            if !visited.contains(&cell) {
                 if Self::has_cycle(
-                    cell,
+                    &cell,
                     &dependencies,
                     &mut visited,
                     &mut temp_visited,
@@ -194,16 +261,29 @@ impl SpreadsheetSource {
             }
         }
 
-        // If we have cycles, we can't proceed with calculation in a reliable way
         if has_cycles {
-            return;
+            println!("WARNING: Cycles detected in formula dependencies!");
         }
 
-        // Step 3: Calculate cells in topological order
-        calculation_order.reverse(); // Reverse to get correct order (leaf nodes first)
+        println!("Calculation order: {:?}", calculation_order);
 
         // Map of cell name to its calculated value
         let mut calculated_values = std::collections::HashMap::new();
+
+        // Pre-populate with all non-formula cells
+        for (row_idx, row) in self.data.iter().enumerate() {
+            for (col_idx, cell) in row.iter().enumerate() {
+                if let CellValue::Value(value) = cell {
+                    let cell_name = format!("{}{}", Self::make_column_name(col_idx), row_idx + 1);
+                    calculated_values.insert(cell_name, value.clone());
+                }
+            }
+        }
+
+        println!("Initial non-formula values:");
+        for (cell, value) in &calculated_values {
+            println!("{}: {:?}", cell, value);
+        }
 
         for cell_name in calculation_order {
             // Find row and column from cell name
@@ -212,6 +292,7 @@ impl SpreadsheetSource {
                     if let CellValue::Calculated(formula, _) = &self.data[row][col] {
                         // Evaluate formula with the current set of calculated values
                         let result = self.evaluate_formula(formula, &calculated_values);
+                        println!("Cell: {}: Result: {:?}", cell_name, result);
 
                         // Store the calculated value
                         if let FormulaResult::Value(value) = &result {
@@ -506,6 +587,7 @@ impl SpreadsheetSource {
                         processed_tokens.push(match value {
                             Value::Decimal(d) => d.to_string(),
                             Value::Text(t) => t,
+                            Value::Empty => "".to_string()
                         });
                     },
                     _ => return sub_result,
