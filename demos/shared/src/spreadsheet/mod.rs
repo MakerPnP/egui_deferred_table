@@ -2,6 +2,7 @@
 ///
 use egui::Ui;
 use log::{debug, trace};
+use rust_decimal::Decimal;
 use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
 use rust_decimal_macros::dec;
 use crate::spreadsheet::formula::{Formula, FormulaResult};
@@ -13,6 +14,8 @@ pub mod formula;
 
 pub struct SpreadsheetSource {
     data: Vec<Vec<CellValue>>,
+
+    recalculation_required: bool,
 }
 
 impl SpreadsheetSource {
@@ -83,11 +86,28 @@ impl SpreadsheetSource {
 
         Self {
             data,
+            recalculation_required: true,
         }
     }
 
-    pub fn render_spinner(&self, ui: &mut Ui) {
-        ui.spinner();
+    pub fn add_column(&mut self) {
+        let dimension = self.get_dimensions();
+        for row in self.data.iter_mut() {
+            assert_eq!(row.len(), dimension.column_count);
+            row.push(CellValue::Value(Value::Empty));
+        }
+    }
+    
+    pub fn add_row(&mut self) {
+        let dimension = self.get_dimensions();
+        let row = (0..dimension.column_count)
+            .map(|_| CellValue::Value(Value::Empty))
+            .collect();
+        self.data.push(row);
+    }
+
+    pub fn render_pending(&self, ui: &mut Ui) {
+        ui.label("...");
     }
 
     pub fn render_error(&self, ui: &mut Ui, message: &String) {
@@ -112,6 +132,27 @@ impl SpreadsheetSource {
         let cell_value = row_values.get(cell_index.column);
 
         cell_value
+    }
+
+    pub fn set_cell_value(&mut self, cell_index: &mut CellIndex, text: &str) {
+        let value = if text.starts_with("=") {
+            let formula = Formula::new(text.to_string());
+            CellValue::Calculated(formula, FormulaResult::Pending)
+        } else if let Ok(decimal) = text.trim().parse::<Decimal>() {
+            let value = Value::Decimal(decimal);
+            CellValue::Value(value)
+        } else {
+            if text.trim().is_empty() {
+                CellValue::Value(Value::Empty)
+            } else {
+                let value = Value::Text(text.to_string());
+                CellValue::Value(value)
+            }
+        };
+
+        self.data[cell_index.row][cell_index.column] = value;
+
+        self.mark_for_recalculation();
     }
 
     // given '0' the result is 'A', '25' is 'Z', given '26' the result is 'AA', given '27' the result is 'AB' and so on.
@@ -287,7 +328,7 @@ impl SpreadsheetSource {
             row.insert(to, value);
         }
 
-        self.recalculate();
+        self.mark_for_recalculation();
     }
 
     pub fn move_row(&mut self, from: usize, to: usize) {
@@ -302,7 +343,15 @@ impl SpreadsheetSource {
         let row = self.data.remove(from);
         self.data.insert(to, row);
 
-        self.recalculate();
+        self.mark_for_recalculation();
+    }
+
+    fn mark_for_recalculation(&mut self) {
+        self.recalculation_required = true;
+    }
+
+    fn requires_recalculation(&self) -> bool {
+        self.recalculation_required
     }
 
     // Initial AI prompt (Clause 3.7 Sonnet):
@@ -328,6 +377,8 @@ impl SpreadsheetSource {
     // if there any cells with dependencies that cannot be met, we need to record this. e.g. if cell A1 had a formula =A1 that would be a self-reference. which can never be evalulated since it depends on itself.
     // ```
     pub fn recalculate(&mut self) {
+        self.recalculation_required = false;
+
         // Step 1: Build dependency graph
         let mut dependencies: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
         let mut cells_with_formulas: Vec<(usize, usize, &Formula)> = Vec::new();
@@ -947,7 +998,7 @@ impl DeferredTableRenderer for SpreadsheetSource {
                     CellValue::Calculated(formula, result) => {
                         match result {
                             FormulaResult::Pending => {
-                                self.render_spinner(ui);
+                                self.render_pending(ui);
                             }
                             FormulaResult::Value(value) => {
                                 self.render_value(ui, value);

@@ -68,5 +68,10 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| {
                 ctx.inspection_ui(ui);
             });
+
+        if self.state.is_automatic_recalculation_enabled() && self.state.needs_recalculation() {
+            self.state.recalculate();
+            ctx.request_repaint();
+        }
     }
 }
