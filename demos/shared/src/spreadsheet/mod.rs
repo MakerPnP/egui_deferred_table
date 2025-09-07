@@ -1,6 +1,7 @@
 ///
 ///
 use egui::Ui;
+use log::{debug, trace};
 use egui_deferred_table::{CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions};
 use rust_decimal_macros::dec;
 use crate::spreadsheet::formula::{Formula, FormulaResult};
@@ -205,9 +206,9 @@ impl SpreadsheetSource {
         }
 
         // Debug: print dependencies
-        println!("Dependencies:");
+        trace!("Dependencies:");
         for (cell, deps) in &dependencies {
-            println!("{} depends on: {:?}", cell, deps);
+            trace!("{} depends on: {:?}", cell, deps);
         }
 
 
@@ -235,9 +236,9 @@ impl SpreadsheetSource {
         }
 
         // Debug: print reversed dependencies
-        println!("Reversed Dependencies:");
+        trace!("Reversed Dependencies:");
         for (cell, deps) in &reversed_deps {
-            println!("{} is used by: {:?}", cell, deps);
+            trace!("{} is used by: {:?}", cell, deps);
         }
         // Step 3: Perform topological sort to determine calculation order
         let mut calculation_order = Vec::new();
@@ -263,10 +264,10 @@ impl SpreadsheetSource {
         }
 
         if has_cycles {
-            println!("WARNING: Cycles detected in formula dependencies!");
+            trace!("WARNING: Cycles detected in formula dependencies!");
         }
 
-        println!("Calculation order: {:?}", calculation_order);
+        trace!("Calculation order: {:?}", calculation_order);
 
         // Map of cell name to its calculated value
         let mut calculated_values = std::collections::HashMap::new();
@@ -281,9 +282,9 @@ impl SpreadsheetSource {
             }
         }
 
-        println!("Initial non-formula values:");
+        trace!("Initial non-formula values:");
         for (cell, value) in &calculated_values {
-            println!("{}: {:?}", cell, value);
+            trace!("{}: {:?}", cell, value);
         }
 
         for cell_name in calculation_order {
@@ -293,7 +294,7 @@ impl SpreadsheetSource {
                     if let CellValue::Calculated(formula, _) = &self.data[row][col] {
                         // Evaluate formula with the current set of calculated values
                         let result = self.evaluate_formula(formula, &calculated_values);
-                        println!("Cell: {}: Result: {:?}", cell_name, result);
+                        debug!("Cell: {}: Result: {:?}", cell_name, result);
 
                         // Store the calculated value
                         if let FormulaResult::Value(value) = &result {
@@ -449,7 +450,7 @@ impl SpreadsheetSource {
         formula: &Formula,
         calculated_values: &std::collections::HashMap<String, Value>
     ) -> FormulaResult {
-        println!("Evaluating formula: {}", formula.formula);
+        trace!("Evaluating formula: {}", formula.formula);
 
         let formula_text = &formula.formula;
         if !formula_text.starts_with('=') {
@@ -638,7 +639,7 @@ impl SpreadsheetSource {
             return FormulaResult::Error("#INVALID_TOKEN".to_string());
         }
 
-        println!("tokens: {:?}", tokens);
+        trace!("tokens: {:?}", tokens);
 
         // Step 1: Parse tokens into values and operators
         let mut values = Vec::new();
@@ -710,7 +711,7 @@ impl SpreadsheetSource {
                 values.remove(i + 1);
                 operators.remove(i);
 
-                println!("After processing * / %: values={:?}, operators={:?}", values, operators);
+                trace!("After processing * / %: values={:?}, operators={:?}", values, operators);
             } else {
                 i += 1; // Move to next operator
             }
@@ -729,7 +730,7 @@ impl SpreadsheetSource {
             values.remove(1);
             operators.remove(0);
 
-            println!("After processing + -: values={:?}, operators={:?}", values, operators);
+            trace!("After processing + -: values={:?}, operators={:?}", values, operators);
         }
 
         // The final result should be the only value left
