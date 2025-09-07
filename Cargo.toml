@@ -28,6 +28,9 @@ indexmap = "2.10.0"
 log = "0.4.27"
 serde = { version = "1.0.219", optional = true, features = ["derive"] }
 
+[dev-dependencies]
+rstest = "0.26.1"
+
 [features]
 persistence = [
     "egui/persistence",

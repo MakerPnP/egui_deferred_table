@@ -360,6 +360,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         let mut row_counter = cell_origin.row - first_row_filtered_count;
 
+                        #[derive(Debug, Clone, Copy)]
+                        enum HeadingItem {
+                            Corner,
+                            Column,
+                            Row
+                        }
+
                         trace!("headers");
                         let header_row_bg_color = ui.style().visuals.widgets.inactive.bg_fill.gamma_multiply(0.5);
                         let mut accumulated_row_heights = 0.0;
@@ -469,7 +476,32 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
-                                response.dnd_set_drag_payload((visible_column_index, mapped_column_index));
+                                let item = if grid_row_index == 0 && grid_column_index == 0 {
+                                    HeadingItem::Corner
+                                } else if grid_row_index == 0 {
+                                    HeadingItem::Column
+                                } else {
+                                    HeadingItem::Row
+                                };
+
+                                struct DndPayload {
+                                    item: HeadingItem,
+                                    index: usize,
+                                }
+
+                                let payload = match item {
+                                    HeadingItem::Column => {
+                                        Some(DndPayload { item, index: mapped_column_index })
+                                    }
+                                    HeadingItem::Row => {
+                                        Some(DndPayload { item, index: mapped_row_index })
+                                    }
+                                    _ => None
+                                };
+
+                                if let Some(payload) = payload {
+                                    response.dnd_set_drag_payload(payload);
+                                }
 
                                 let bg_color = if grid_row_index == 0 {
                                     header_row_bg_color
@@ -491,41 +523,35 @@ impl<DataSource> DeferredTable<DataSource> {
                                 cell_ui.set_clip_rect(cell_clip_rect);
                                 cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                                enum HeadingItem {
-                                    Corner,
-                                    Column,
-                                    Row
-                                }
-
-                                let (what, label) = if grid_row_index == 0 && grid_column_index == 0 {
-                                    (HeadingItem::Corner, format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row))
-                                } else if grid_row_index == 0 {
-                                    let label = if let Some(column) = builder.table.columns.get(&mapped_column_index) {
-                                        column.name.clone()
-                                    } else if self.parameters.zero_based_headers {
-                                        mapped_column_index.to_string()
-                                    } else {
-                                        let mapped_column_number = mapped_column_index + 1;
-                                        mapped_column_number.to_string()
-                                    };
-
-                                    (HeadingItem::Column, label)
-                                } else {
-                                    let label = if self.parameters.zero_based_headers {
-                                        mapped_row_index.to_string()
-                                    } else {
-                                        let mapped_row_number = mapped_row_index + 1;
-                                        mapped_row_number.to_string()
-                                    };
-
-                                    (HeadingItem::Row, label)
+                                let label = match item {
+                                    HeadingItem::Corner => {
+                                        format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row)
+                                    }
+                                    HeadingItem::Column => {
+                                        if let Some(column) = builder.table.columns.get(&mapped_column_index) {
+                                            column.name.clone()
+                                        } else if self.parameters.zero_based_headers {
+                                            mapped_column_index.to_string()
+                                        } else {
+                                            let mapped_column_number = mapped_column_index + 1;
+                                            mapped_column_number.to_string()
+                                        }
+                                    }
+                                    HeadingItem::Row => {
+                                        if self.parameters.zero_based_headers {
+                                            mapped_row_index.to_string()
+                                        } else {
+                                            let mapped_row_number = mapped_row_index + 1;
+                                            mapped_row_number.to_string()
+                                        }
+                                    }
                                 };
 
                                 cell_ui.add(
                                     egui::Label::new(&label).selectable(false),
                                 );
 
-                                if matches!(what, HeadingItem::Column) {
+                                if !matches!(item, HeadingItem::Corner) {
                                     if response.dragged() {
                                         Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
                                             .gap(12.0)
@@ -535,7 +561,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
 
                                     // Highlight drop target
-                                    if response.dnd_hover_payload::<(usize, usize)>().is_some() {
+                                    if response.dnd_hover_payload::<DndPayload>().is_some() {
                                         ui.painter().rect_filled(
                                             cell_clip_rect,
                                             CornerRadius::ZERO,
@@ -543,9 +569,20 @@ impl<DataSource> DeferredTable<DataSource> {
                                         );
                                     }
 
-                                    if let Some(payload) = response.dnd_release_payload::<(usize, usize)>() {
-                                        info!("dropped: {:?} onto: {:?}", *payload, (visible_column_index, mapped_column_index));
-                                        actions.push(Action::ColumnReorder{ from: payload.1, to: mapped_column_index })
+                                    // handle dnd release
+                                    if let Some(payload) = response.dnd_release_payload::<DndPayload>() {
+                                        match (payload.item, item) {
+                                            // currently only dragging like onto like is supported.
+                                            (HeadingItem::Column, HeadingItem::Column) => if payload.index != mapped_column_index {
+                                                info!("dnd release: column {} -> column {}", payload.index, mapped_column_index);
+                                                actions.push(Action::ColumnReorder{ from: payload.index, to: mapped_column_index })
+                                            }
+                                            (HeadingItem::Row, HeadingItem::Row) => if payload.index != mapped_row_index {
+                                                info!("dnd release: row {} -> row {}", payload.index, mapped_row_index);
+                                                actions.push(Action::RowReorder{ from: payload.index, to: mapped_row_index })
+                                            }
+                                            _ => ()
+                                        }
                                     }
                                 }
 
@@ -723,8 +760,9 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
 pub enum Action {
     CellClicked(CellIndex),
 
-    /// when the user drags-and-drops one column onto another this action is generated.
-    /// handle it by either:
+    /// Generated when the user drags-and-drops one column onto another.
+    ///
+    /// Handle it as follows:
     /// a) updating the column ordering information appropriately.
     /// d) updating the underlying data source, without re-ordering columns themselves.
     /// c) ignore it, e.g. if it's unsupported, or the columns/data are locked.
@@ -733,6 +771,21 @@ pub enum Action {
     /// 1. [`DeferredTableDataSource::column_ordering`]
     /// 2. [`apply_reordering`]
     ColumnReorder {
+        from: usize,
+        to: usize,
+    },
+
+    /// Generated when the user drags-and-drops one row onto another.
+    ///
+    /// Handle it as follows:
+    /// a) updating the row ordering information appropriately.
+    /// d) updating the underlying data source, without re-ordering rows themselves.
+    /// c) ignore it, e.g. if it's unsupported, or the rows/data are locked.
+    ///
+    /// See also:
+    /// 1. [`DeferredTableDataSource::row_ordering`]
+    /// 2. [`apply_reordering`]
+    RowReorder {
         from: usize,
         to: usize,
     },
@@ -1243,25 +1296,73 @@ impl_deferred_table_for_tuple!((A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P),
 /// 3. [`Action::ColumnReorder`]
 ///
 pub fn apply_reordering(ordering: &mut Option<Vec<usize>>, from: usize, to: usize) {
+    if from == to {
+        return;
+    }
+
+    //
+    // Part 1
+    //
+
     // Initialize ordering if it doesn't exist
     if ordering.is_none() {
         *ordering = Some(Vec::new());
     }
 
     // Get a mutable reference to column_ordering
-    let Some(column_ordering) = ordering else {
-        unreachable!();
-    };
+    let ordering = ordering.as_mut().unwrap();
 
     // Find the maximum index needed
     let max_index = from.max(to);
 
     // Expand the vector if needed to include max_index
-    while column_ordering.len() <= max_index {
-        column_ordering.push(column_ordering.len());
+    while ordering.len() <= max_index {
+        ordering.push(ordering.len());
     }
 
-    // Perform the swap
-    let value = column_ordering.remove(from);
-    column_ordering.insert(to, value);
+    //
+    // Part 2: Perform the actual move
+    //
+
+    // Find positions of 'from' and 'to' in the ordering vector
+    let from_pos = ordering.iter().position(|&x| x == from).unwrap();
+    let to_pos = ordering.iter().position(|&x| x == to).unwrap();
+
+    // Remove 'from' from its current position
+    ordering.remove(from_pos);
+
+    // if to_pos was after from_pos, it will be out by one, but this is factored into the code below.
+    ordering.insert(to_pos, from);
+}
+
+#[cfg(test)]
+mod reordering_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    // dragging left
+    #[case(0,1,vec![1,0], vec![0,1])]
+    #[case(4,0,vec![0,1,2,3,4,5,6], vec![4,0,1,2,3,5,6])]
+    #[case(10,0,vec![], vec![10,0,1,2,3,4,5,6,7,8,9])]
+    // dragging right
+    #[case(0,1,vec![], vec![1,0])]
+    #[case(1,0,vec![1,0], vec![0,1])]
+    #[case(1,0,vec![1,0,2,3,4], vec![0,1,2,3,4])]
+    #[case(4,0,vec![], vec![4,0,1,2,3])]
+    #[case(4,3,vec![4,0,1,2,3,5,6], vec![0,1,2,3,4,5,6])]
+    #[case(10,9,vec![10,0,1,2,3,4,5,6,7,8,9], vec![0,1,2,3,4,5,6,7,8,9,10])]
+    // from/to same
+    #[case(0,0,vec![], vec![])]
+    #[case(4,4,vec![0,1], vec![0,1])]
+    fn test_apply_reordering(
+        #[case] from: usize,
+        #[case] to: usize,
+        #[case] ordering: Vec<usize>,
+        #[case] expected: Vec<usize>,
+    ) {
+        let mut ordering = Some(ordering);
+        apply_reordering(&mut ordering, from, to);
+        assert_eq!(ordering, Some(expected));
+    }
 }

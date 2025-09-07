@@ -109,6 +109,14 @@ impl SpreadsheetSource {
 
         // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
     }
+
+    pub fn move_row(&mut self, from: usize, to: usize) {
+        let row = self.data.remove(from);
+        self.data.insert(to, row);
+        
+        // FUTURE force re-calculation of everything that referenced the data in the from/to columns.
+    }
+
 }
 
 impl DeferredTableDataSource for SpreadsheetSource {

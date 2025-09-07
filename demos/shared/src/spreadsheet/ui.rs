@@ -48,6 +48,10 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {
                 // we actually want to MOVE the column data itself, not re-order the columns
                 state.data_source.move_column(from, to);
             }
+            Action::RowReorder { from, to } => {
+                // we actually want to MOVE the column data itself, not re-order the columns
+                state.data_source.move_row(from, to);
+            }
         }
     }
 }

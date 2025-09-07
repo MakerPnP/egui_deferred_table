@@ -102,6 +102,12 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
                 // Update UI to reflect changes
                 state.ui_state.column_ordering_input = list_to_string(state.data.column_ordering.as_mut().unwrap());
             }
+            Action::RowReorder { from, to } => {
+                apply_reordering(&mut state.data.row_ordering, from, to);
+
+                // Update UI to reflect changes
+                state.ui_state.row_ordering_input = list_to_string(state.data.row_ordering.as_mut().unwrap());
+            }
         }
     }
 }
