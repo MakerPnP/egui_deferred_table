@@ -27,15 +27,26 @@ impl SpreadsheetSource {
                 CellValue::Value(Value::Text("Hello World".to_string())),
                 CellValue::Value(Value::Decimal(dec!(42.0))),
                 CellValue::Value(Value::Decimal(dec!(69.0))),
-                CellValue::Calculated(Formula::new("=B2+C2".to_string()), FormulaResult::Pending)
+                CellValue::Calculated(Formula::new("=B2+C2".to_string()), FormulaResult::Pending),
             ],
             vec![
                 CellValue::Value(Value::Text("Example data".to_string())),
                 CellValue::Value(Value::Decimal(dec!(6.0))),
                 CellValue::Value(Value::Decimal(dec!(9.0))),
-                CellValue::Calculated(Formula::new("=B3+C3".to_string()), FormulaResult::Pending)
+                CellValue::Calculated(Formula::new("=B3+C3".to_string()), FormulaResult::Pending),
             ],
-
+            vec![
+                CellValue::Value(Value::Text("Total".to_string())),
+                CellValue::Calculated(Formula::new("=B2+B3".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=C2+C3".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=D2+D3".to_string()), FormulaResult::Pending),
+            ],
+            vec![
+                CellValue::Value(Value::Text("Factor".to_string())),
+                CellValue::Calculated(Formula::new("=5+(10/2)".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=B5*2".to_string()), FormulaResult::Pending),
+                CellValue::Calculated(Formula::new("=C5+(D2*D3*D4)".to_string()), FormulaResult::Pending),
+            ],
         ];
 
         Self {
@@ -331,19 +342,31 @@ impl SpreadsheetSource {
         Some((row, col))
     }
 
-    /// This is a simplified implementation
-    /// In a real spreadsheet, you'd have a proper formula evaluator.
+    /// Evaluates a formula expression with support for:
+    /// - Basic operations: +, -, *, /, %
+    /// - Cell references (e.g., A1, B2)
+    /// - Parentheses for sub-expressions
+    /// - Chained operations (e.g., A1+B1*C1)
     ///
-    /// the only formulas currently supported are:
-    /// 1. simple additions, e.g. =B1+B2
-    /// 2. cell reference, e.g. =C2
+    /// AI prompt:
+    /// ```text
+    /// add support for other operators (*, /, -, +, %), and chained operators and brackets `( )`
+    ///
+    /// example formulas:
+    ///
+    /// =A1
+    /// =A1*2
+    /// =A1+B1
+    /// =A1+(B1/2)
+    /// =A1+(B1*(C1*D1))*5
+    ///
+    /// operator precedence is left to right, processing sub expressions (in brackets) as you go.
+    /// ```
     fn evaluate_formula(
         &self,
         formula: &Formula,
         calculated_values: &std::collections::HashMap<String, Value>
     ) -> FormulaResult {
-
-        // For now, just parse basic operations like addition between cells
         let formula_text = &formula.formula;
         if !formula_text.starts_with('=') {
             return FormulaResult::Error("#INVALID_FORMULA".to_string());
@@ -351,33 +374,243 @@ impl SpreadsheetSource {
 
         let expression = &formula_text[1..]; // Remove the '=' prefix
 
-        // Check for simple addition (e.g., "=A1+B1")
-        if let Some(pos) = expression.find('+') {
-            let left = &expression[..pos].trim();
-            let right = &expression[pos+1..].trim();
+        // Parse and evaluate the expression
+        self.evaluate_expression(expression, calculated_values)
+    }
 
-            let left_value = self.get_cell_value_by_ref(left, calculated_values);
-            let right_value = self.get_cell_value_by_ref(right, calculated_values);
+    /// Parses and evaluates a formula expression
+    fn evaluate_expression(
+        &self,
+        expression: &str,
+        calculated_values: &std::collections::HashMap<String, Value>
+    ) -> FormulaResult {
+        let expression = expression.trim();
 
-            match (left_value, right_value) {
-                (Some(Value::Decimal(d1)), Some(Value::Decimal(d2))) => {
-                    FormulaResult::Value(Value::Decimal(d1 + d2))
+        // Handle empty expression
+        if expression.is_empty() {
+            return FormulaResult::Error("#EMPTY_EXPRESSION".to_string());
+        }
+
+        // Tokenize the expression
+        let tokens = self.tokenize_expression(expression);
+
+        // Parse and evaluate tokens
+        self.evaluate_tokens(&tokens, calculated_values)
+    }
+
+    /// Tokenizes an expression into operands and operators
+    fn tokenize_expression(&self, expression: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+        let mut in_cell_ref = false;
+        let mut paren_level = 0;
+
+        for c in expression.chars() {
+            match c {
+                '(' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    paren_level += 1;
+                    tokens.push("(".to_string());
                 },
-                (Some(Value::Text(t1)), Some(Value::Text(t2))) => {
-                    FormulaResult::Value(Value::Text(format!("{}{}", t1, t2)))
+                ')' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    paren_level -= 1;
+                    if paren_level < 0 {
+                        // Unmatched parenthesis - this will be caught during evaluation
+                        tokens.push(")".to_string());
+                        paren_level = 0;
+                    } else {
+                        tokens.push(")".to_string());
+                    }
                 },
-                _ => FormulaResult::Error("#TYPE_MISMATCH".to_string()),
+                '+' | '-' | '*' | '/' | '%' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    tokens.push(c.to_string());
+                    in_cell_ref = false;
+                },
+                ' ' | '\t' | '\n' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    in_cell_ref = false;
+                },
+                _ => {
+                    // Start of a cell reference or number
+                    if !in_cell_ref && c.is_ascii_alphabetic() {
+                        in_cell_ref = true;
+                    }
+                    current_token.push(c);
+                }
             }
         }
-        // Check for cell reference (e.g., "=A1")
-        else if expression.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
-            self.get_cell_value_by_ref(expression, calculated_values)
-                .map_or(FormulaResult::Error("#REF".to_string()), |v| FormulaResult::Value(v))
+
+        // Don't forget the last token
+        if !current_token.is_empty() {
+            tokens.push(current_token);
         }
-        else {
-            FormulaResult::Error("#SYNTAX_ERROR".to_string())
+
+        tokens
+    }
+
+    /// Evaluates a sequence of tokens
+    fn evaluate_tokens(
+        &self,
+        tokens: &[String],
+        calculated_values: &std::collections::HashMap<String, Value>
+    ) -> FormulaResult {
+        if tokens.is_empty() {
+            return FormulaResult::Error("#EMPTY_EXPRESSION".to_string());
+        }
+
+        // Find matching parentheses and evaluate sub-expressions
+        let mut processed_tokens = Vec::new();
+        let mut i = 0;
+
+        while i < tokens.len() {
+            if tokens[i] == "(" {
+                // Find the matching closing parenthesis
+                let mut paren_level = 1;
+                let mut j = i + 1;
+
+                while j < tokens.len() && paren_level > 0 {
+                    if tokens[j] == "(" {
+                        paren_level += 1;
+                    } else if tokens[j] == ")" {
+                        paren_level -= 1;
+                    }
+                    j += 1;
+                }
+
+                if paren_level != 0 {
+                    return FormulaResult::Error("#UNMATCHED_PARENTHESIS".to_string());
+                }
+
+                // Extract the sub-expression within the parentheses
+                let sub_expr_tokens = &tokens[(i+1)..(j-1)];
+
+                // Evaluate the sub-expression
+                let sub_result = self.evaluate_tokens(sub_expr_tokens, calculated_values);
+
+                match sub_result {
+                    FormulaResult::Value(value) => {
+                        processed_tokens.push(match value {
+                            Value::Decimal(d) => d.to_string(),
+                            Value::Text(t) => t,
+                        });
+                    },
+                    _ => return sub_result,
+                }
+
+                i = j;
+            } else {
+                processed_tokens.push(tokens[i].clone());
+                i += 1;
+            }
+        }
+
+        // Process the expression without parentheses
+        self.evaluate_simple_expression(&processed_tokens, calculated_values)
+    }
+
+    /// Evaluates a simple expression with no parentheses
+    fn evaluate_simple_expression(
+        &self,
+        tokens: &[String],
+        calculated_values: &std::collections::HashMap<String, Value>
+    ) -> FormulaResult {
+        if tokens.is_empty() {
+            return FormulaResult::Error("#EMPTY_EXPRESSION".to_string());
+        }
+
+        // If there's only one token, it must be a cell reference or a literal
+        if tokens.len() == 1 {
+            let token = &tokens[0];
+
+            // Check if it's a cell reference
+            if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                return self.get_cell_value_by_ref(token, calculated_values)
+                    .map_or(FormulaResult::Error("#REF".to_string()),
+                            |v| FormulaResult::Value(v));
+            }
+
+            // Check if it's a number
+            if let Ok(num) = token.parse::<rust_decimal::Decimal>() {
+                return FormulaResult::Value(Value::Decimal(num));
+            }
+
+            return FormulaResult::Error("#INVALID_TOKEN".to_string());
+        }
+
+        // For expressions with operators, evaluate left to right
+        let mut result_value = None;
+        let mut current_op = None;
+
+        for token in tokens {
+            match token.as_str() {
+                "+" | "-" | "*" | "/" | "%" => {
+                    current_op = Some(token.clone());
+                },
+                _ => {
+                    let operand = if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                        // It's a cell reference
+                        match self.get_cell_value_by_ref(token, calculated_values) {
+                            Some(Value::Decimal(d)) => d,
+                            _ => {
+                                return FormulaResult::Error(format!("#REF_OR_TYPE_MISMATCH: {}", token))
+                            },
+                        }
+                    } else {
+                        // It's a number
+                        match token.parse::<rust_decimal::Decimal>() {
+                            Ok(num) => num,
+                            Err(_) => return FormulaResult::Error(format!("#INVALID_NUMBER: {}", token)),
+                        }
+                    };
+
+                    if let Some(result) = result_value {
+                        // Apply the current operator
+                        result_value = Some(match current_op.as_deref() {
+                            Some("+") => result + operand,
+                            Some("-") => result - operand,
+                            Some("*") => result * operand,
+                            Some("/") => {
+                                if operand.is_zero() {
+                                    return FormulaResult::Error("#DIV_BY_ZERO".to_string());
+                                }
+                                result / operand
+                            },
+                            Some("%") => {
+                                if operand.is_zero() {
+                                    return FormulaResult::Error("#DIV_BY_ZERO".to_string());
+                                }
+                                result % operand
+                            },
+                            _ => return FormulaResult::Error("#INVALID_OPERATOR".to_string()),
+                        });
+                    } else {
+                        // First operand
+                        result_value = Some(operand);
+                    }
+                }
+            }
+        }
+
+        match result_value {
+            Some(result) => FormulaResult::Value(Value::Decimal(result)),
+            None => FormulaResult::Error("#INVALID_EXPRESSION".to_string()),
         }
     }
+
 
     fn get_cell_value_by_ref(
         &self,
