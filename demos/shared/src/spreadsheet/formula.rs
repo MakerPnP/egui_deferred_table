@@ -1,7 +1,7 @@
 use crate::spreadsheet::value::Value;
 
 pub struct Formula {
-    formula: String,
+    pub(crate) formula: String,
 }
 
 impl Formula {

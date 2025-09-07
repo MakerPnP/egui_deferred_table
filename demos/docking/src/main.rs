@@ -285,6 +285,9 @@ pub struct LogState {
 }
 
 fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
+
+    shared::spreadsheet::ui::show_controls(ui, state);
+
     let (_response, mut actions) = shared::spreadsheet::ui::show_table(ui, state);
 
     // override some of the default action processing

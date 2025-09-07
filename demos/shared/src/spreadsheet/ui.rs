@@ -1,6 +1,7 @@
 use egui::{Response, Ui};
 use log::debug;
 use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, TableDimensions};
+use crate::sparse::ui::SparseTableState;
 use crate::spreadsheet::SpreadsheetSource;
 
 pub struct SpreadsheetState {
@@ -53,5 +54,11 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {
                 state.data_source.move_row(from, to);
             }
         }
+    }
+}
+
+pub fn show_controls(ui: &mut Ui, state: &mut SpreadsheetState) {
+    if ui.button("Recalculate").clicked() {
+        state.data_source.recalculate();
     }
 }

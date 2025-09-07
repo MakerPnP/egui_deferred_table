@@ -43,7 +43,9 @@ impl eframe::App for MyApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            
+
+            shared::spreadsheet::ui::show_controls(ui, &mut self.state);
+
             ui.label("content above");
             ui.separator();
             egui::ScrollArea::both()
