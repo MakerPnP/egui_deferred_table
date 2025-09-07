@@ -48,7 +48,8 @@ impl SpreadsheetSource {
                 CellValue::Value(Value::Empty),
             ],
             vec![
-                CellValue::Value(Value::Empty),
+                CellValue::Calculated(Formula::new("=1**".to_string()), FormulaResult::Pending),
+                //CellValue::Value(Value::Empty),
                 CellValue::Value(Value::Empty),
                 CellValue::Value(Value::Text("Final Result".to_string())),
                 CellValue::Calculated(Formula::new("=C5+(B4*C4)*(D2*D3)/D4".to_string()), FormulaResult::Pending),
@@ -448,6 +449,8 @@ impl SpreadsheetSource {
         formula: &Formula,
         calculated_values: &std::collections::HashMap<String, Value>
     ) -> FormulaResult {
+        println!("Evaluating formula: {}", formula.formula);
+
         let formula_text = &formula.formula;
         if !formula_text.starts_with('=') {
             return FormulaResult::Error("#INVALID_FORMULA".to_string());
@@ -604,7 +607,9 @@ impl SpreadsheetSource {
         self.evaluate_simple_expression(&processed_tokens, calculated_values)
     }
 
-    /// Evaluates a simple expression with no parentheses
+    /// Evaluates a simple expression with no parentheses, respecting standard mathematical operator precedence:
+    /// 1. Multiplication, division, modulo (left to right)
+    /// 2. Addition, subtraction (left to right)
     fn evaluate_simple_expression(
         &self,
         tokens: &[String],
@@ -633,66 +638,105 @@ impl SpreadsheetSource {
             return FormulaResult::Error("#INVALID_TOKEN".to_string());
         }
 
-        // For expressions with operators, evaluate left to right
-        let mut result_value = None;
-        let mut current_op = None;
+        println!("tokens: {:?}", tokens);
+
+        // Step 1: Parse tokens into values and operators
+        let mut values = Vec::new();
+        let mut operators = Vec::new();
+
+
+        // Track if we're expecting an operand or operator
+        let mut expect_operand = true;
 
         for token in tokens {
-            match token.as_str() {
-                "+" | "-" | "*" | "/" | "%" => {
-                    current_op = Some(token.clone());
-                },
-                _ => {
-                    let operand = if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
-                        // It's a cell reference
-                        match self.get_cell_value_by_ref(token, calculated_values) {
-                            Some(Value::Decimal(d)) => d,
-                            _ => {
-                                return FormulaResult::Error(format!("#REF_OR_TYPE_MISMATCH: {}", token))
-                            },
-                        }
-                    } else {
-                        // It's a number
-                        match token.parse::<rust_decimal::Decimal>() {
-                            Ok(num) => num,
-                            Err(_) => return FormulaResult::Error(format!("#INVALID_NUMBER: {}", token)),
-                        }
-                    };
-
-                    if let Some(result) = result_value {
-                        // Apply the current operator
-                        result_value = Some(match current_op.as_deref() {
-                            Some("+") => result + operand,
-                            Some("-") => result - operand,
-                            Some("*") => result * operand,
-                            Some("/") => {
-                                if operand.is_zero() {
-                                    return FormulaResult::Error("#DIV_BY_ZERO".to_string());
-                                }
-                                result / operand
-                            },
-                            Some("%") => {
-                                if operand.is_zero() {
-                                    return FormulaResult::Error("#DIV_BY_ZERO".to_string());
-                                }
-                                result % operand
-                            },
-                            _ => return FormulaResult::Error("#INVALID_OPERATOR".to_string()),
-                        });
-                    } else {
-                        // First operand
-                        result_value = Some(operand);
+            if expect_operand {
+                // Parse operand (cell reference or number)
+                let value = if token.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                    // It's a cell reference
+                    match self.get_cell_value_by_ref(token, calculated_values) {
+                        Some(Value::Decimal(d)) => d,
+                        _ => return FormulaResult::Error(format!("#REF_OR_TYPE_MISMATCH: {}", token)),
                     }
+                } else {
+                    // It's a number
+                    match token.parse::<rust_decimal::Decimal>() {
+                        Ok(num) => num,
+                        Err(_) => return FormulaResult::Error(format!("#INVALID_NUMBER: {}", token)),
+                    }
+                };
+
+                values.push(value);
+                expect_operand = false;
+            } else {
+                // Parse operator
+                match token.as_str() {
+                    "+" | "-" | "*" | "/" | "%" => {
+                        operators.push(token.clone());
+                        expect_operand = true;
+                    },
+                    _ => return FormulaResult::Error(format!("#EXPECTED_OPERATOR_GOT: {}", token)),
                 }
             }
         }
 
-        match result_value {
-            Some(result) => FormulaResult::Value(Value::Decimal(result)),
-            None => FormulaResult::Error("#INVALID_EXPRESSION".to_string()),
+        // Validate we have the correct number of values and operators
+        if values.len() != operators.len() + 1 {
+            return FormulaResult::Error("#INVALID_EXPRESSION_STRUCTURE".to_string());
         }
-    }
 
+        // Step 2: First process all higher precedence operators (* / %)
+        let mut i = 0;
+        while i < operators.len() {
+            if operators[i] == "*" || operators[i] == "/" || operators[i] == "%" {
+                let result = match operators[i].as_str() {
+                    "*" => values[i] * values[i + 1],
+                    "/" => {
+                        if values[i + 1].is_zero() {
+                            return FormulaResult::Error("#DIV_BY_ZERO".to_string());
+                        }
+                        values[i] / values[i + 1]
+                    },
+                    "%" => {
+                        if values[i + 1].is_zero() {
+                            return FormulaResult::Error("#DIV_BY_ZERO".to_string());
+                        }
+                        values[i] % values[i + 1]
+                    },
+                    _ => unreachable!(), // We've already filtered for valid operators
+                };
+
+                // Replace the first value with the result and remove the second value and the operator
+                values[i] = result;
+                values.remove(i + 1);
+                operators.remove(i);
+
+                println!("After processing * / %: values={:?}, operators={:?}", values, operators);
+            } else {
+                i += 1; // Move to next operator
+            }
+        }
+
+        // Step 3: Process lower precedence operators (+ -)
+        while !operators.is_empty() {
+            let result = match operators[0].as_str() {
+                "+" => values[0] + values[1],
+                "-" => values[0] - values[1],
+                _ => unreachable!(), // Only + and - should remain
+            };
+
+            // Replace the first value with the result and remove the second value and the operator
+            values[0] = result;
+            values.remove(1);
+            operators.remove(0);
+
+            println!("After processing + -: values={:?}, operators={:?}", values, operators);
+        }
+
+        // The final result should be the only value left
+        assert!(values.len() == 1, "Expected exactly one value to remain");
+
+        FormulaResult::Value(Value::Decimal(values[0]))
+    }
 
     fn get_cell_value_by_ref(
         &self,
