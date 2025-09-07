@@ -338,7 +338,7 @@ fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut Sprea
 
     let (_response, mut actions) = shared::spreadsheet::ui::show_table(ui, state);
 
-    // override some of the default action processing
+    // pre-process the actions
     actions.retain(|action| match action {
         Action::CellClicked(cell_index) => {
             example_log(
@@ -346,13 +346,18 @@ fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut Sprea
                 Level::Info,
                 format!("Cell clicked. cell: {:?}", cell_index),
             );
-            false
+            true
         }
         _ => true,
     });
 
     // use the default processing for remaining actions
     shared::spreadsheet::ui::handle_actions(actions, state);
+
+    if state.is_automatic_recalculation_enabled() && state.needs_recalculation() {
+        state.recalculate();
+        ui.ctx().request_repaint();
+    }
 }
 
 fn contents_sparse_table(ui: &mut Ui, _context: &mut TabContext, state: &mut SparseTableState) {
