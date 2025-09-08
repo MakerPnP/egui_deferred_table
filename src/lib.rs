@@ -368,13 +368,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         let mut row_counter = cell_origin.row - first_row_filtered_count;
 
-                        #[derive(Debug, Clone, Copy)]
-                        enum HeadingItem {
-                            Corner,
-                            Column,
-                            Row
-                        }
-
                         trace!("headers");
                         let header_row_bg_color = ui.style().visuals.widgets.inactive.bg_fill.gamma_multiply(0.5);
                         let mut accumulated_row_heights = 0.0;
@@ -410,19 +403,21 @@ impl<DataSource> DeferredTable<DataSource> {
                             let mut accumulated_column_widths = 0.0;
 
                             for grid_column_index in 0..=visible_column_count {
-                                if grid_row_index >= 1 && grid_column_index >= 1 {
-                                    // no cell rendering
+                                if grid_column_index + cell_origin.column > dimensions.column_count {
                                     break
                                 }
 
-                                if grid_column_index + cell_origin.column > dimensions.column_count {
+                                let item = Self::build_grid_item(grid_row_index, grid_column_index);
+
+                                if matches!(item, GridItem::Cell) {
+                                    // no cell rendering
                                     break
                                 }
 
                                 let visible_column_index = cell_origin.column + (grid_column_index.saturating_sub(1));
                                 let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
 
-                                if grid_column_index > 0 {
+                                if matches!(item, GridItem::Column) {
                                     if let Some(columns_to_filter) = &columns_to_filter {
                                         if columns_to_filter.contains(&mapped_column_index) {
                                             trace!("filtered column");
@@ -431,13 +426,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
                                 }
 
-                                let start_pos = if grid_column_index > 0 || grid_row_index > 0 {
+                                let start_pos = if matches!(item, GridItem::Column | GridItem::Row) {
                                     rect.min
                                 } else {
                                     table_max_rect.min
                                 };
 
-                                let inner_column_width = if grid_column_index > 0 {
+                                let inner_column_width = if matches!(item, GridItem::Column) {
                                     *state.column_widths.get(mapped_column_index).unwrap_or(&inner_cell_size.x)
                                 } else {
                                     inner_cell_size.x
@@ -488,24 +483,16 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
-                                let item = if grid_row_index == 0 && grid_column_index == 0 {
-                                    HeadingItem::Corner
-                                } else if grid_row_index == 0 {
-                                    HeadingItem::Column
-                                } else {
-                                    HeadingItem::Row
-                                };
-
                                 struct DndPayload {
-                                    item: HeadingItem,
+                                    item: GridItem,
                                     index: usize,
                                 }
 
                                 let payload = match item {
-                                    HeadingItem::Column => {
+                                    GridItem::Column => {
                                         Some(DndPayload { item, index: mapped_column_index })
                                     }
-                                    HeadingItem::Row => {
+                                    GridItem::Row => {
                                         Some(DndPayload { item, index: mapped_row_index })
                                     }
                                     _ => None
@@ -536,10 +523,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                 let label = match item {
-                                    HeadingItem::Corner => {
+                                    GridItem::Corner => {
                                         format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row)
                                     }
-                                    HeadingItem::Column => {
+                                    GridItem::Column => {
                                         if let Some(column) = builder.table.columns.get(&mapped_column_index) {
                                             column.name.clone()
                                         } else if self.parameters.zero_based_headers {
@@ -549,13 +536,17 @@ impl<DataSource> DeferredTable<DataSource> {
                                             mapped_column_number.to_string()
                                         }
                                     }
-                                    HeadingItem::Row => {
+                                    GridItem::Row => {
                                         if self.parameters.zero_based_headers {
                                             mapped_row_index.to_string()
                                         } else {
                                             let mapped_row_number = mapped_row_index + 1;
                                             mapped_row_number.to_string()
                                         }
+                                    },
+                                    GridItem::Cell => {
+                                        // already filtered out
+                                        unreachable!()
                                     }
                                 };
 
@@ -563,7 +554,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     egui::Label::new(&label).selectable(false),
                                 );
 
-                                if !matches!(item, HeadingItem::Corner) {
+                                if !matches!(item, GridItem::Corner) {
                                     if response.dragged() {
                                         Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
                                             .gap(12.0)
@@ -585,11 +576,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                     if let Some(payload) = response.dnd_release_payload::<DndPayload>() {
                                         match (payload.item, item) {
                                             // currently only dragging like onto like is supported.
-                                            (HeadingItem::Column, HeadingItem::Column) => if payload.index != mapped_column_index {
+                                            (GridItem::Column, GridItem::Column) => if payload.index != mapped_column_index {
                                                 info!("dnd release: column {} -> column {}", payload.index, mapped_column_index);
                                                 actions.push(Action::ColumnReorder{ from: payload.index, to: mapped_column_index })
                                             }
-                                            (HeadingItem::Row, HeadingItem::Row) => if payload.index != mapped_row_index {
+                                            (GridItem::Row, GridItem::Row) => if payload.index != mapped_row_index {
                                                 info!("dnd release: row {} -> row {}", payload.index, mapped_row_index);
                                                 actions.push(Action::RowReorder{ from: payload.index, to: mapped_row_index })
                                             }
@@ -755,6 +746,18 @@ impl<DataSource> DeferredTable<DataSource> {
         (ui.response(), actions)
     }
 
+    fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
+        if grid_row_index == 0 && grid_column_index == 0 {
+            GridItem::Corner
+        } else if grid_row_index == 0 {
+            GridItem::Column
+        } else if grid_column_index == 0 {
+            GridItem::Row
+        } else {
+            GridItem::Cell
+        }
+    }
+
     fn map_index(count: usize, row_ordering: &[usize], visible_row_index: usize) -> usize {
         let mut mapped_row_index = *row_ordering
             .get(visible_row_index)
@@ -773,6 +776,14 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum GridItem {
+    Corner,
+    Column,
+    Row,
+    Cell,
 }
 
 #[derive(Clone, Debug)]
