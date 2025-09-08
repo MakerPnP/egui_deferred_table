@@ -9,6 +9,7 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::ops::Range;
 
+const SHOW_HEADER_CELL_BORDERS: bool = false;
 const SHOW_CELL_BORDERS: bool = true;
 
 pub struct DeferredTable<DataSource> {
@@ -512,7 +513,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     .with_clip_rect(cell_clip_rect)
                                     .rect_filled(cell_rect, 0.0, bg_color);
 
-                                if SHOW_CELL_BORDERS {
+                                if SHOW_HEADER_CELL_BORDERS {
                                     ui.painter()
                                         .with_clip_rect(cell_clip_rect)
                                         .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
