@@ -236,14 +236,14 @@ impl<DataSource> DeferredTable<DataSource> {
             let outer_inner_half_difference = outer_inner_difference / 2.0;
 
             // add the width/height of the column/row headers to the sum of the column widths/row heights, respectively.
-            let total_content_width = state.column_widths.iter().sum::<f32>() + (outer_inner_difference.x * dimensions.column_count as f32) + outer_cell_size.x;
-            let total_content_height = state.row_heights.iter().sum::<f32>() + (outer_inner_difference.y * dimensions.row_count as f32) + outer_cell_size.y;
+            let total_content_width = state.column_widths.iter().sum::<f32>() + ((outer_inner_difference.x + 1.0) * dimensions.column_count as f32) + outer_cell_size.x;
+            let total_content_height = state.row_heights.iter().sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
 
             let columns_to_filter = data_source.columns_to_filter();
             let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
                 columns.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x).unwrap_or(0.0)
+                    state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()
             });
 
@@ -251,7 +251,7 @@ impl<DataSource> DeferredTable<DataSource> {
             let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
                 rows.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y).unwrap_or(0.0)
+                    state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()
             });
 
