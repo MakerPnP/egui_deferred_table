@@ -455,7 +455,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let mut y = start_pos.y + accumulated_row_heights;
                                 let mut x = start_pos.x + accumulated_column_widths;
-                                accumulated_column_widths += outer_column_width;
+                                accumulated_column_widths += outer_column_width + 1.0;
 
                                 if grid_row_index == 0 {
                                     y = table_max_rect.min.y;
@@ -469,10 +469,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let mut cell_clip_rect = cell_rect.intersect(translated_viewport_rect);
 
                                 if grid_row_index == 1 {
-                                    cell_clip_rect.min.y = table_max_rect.min.y + outer_cell_size.y;
+                                    cell_clip_rect.min.y = table_max_rect.min.y + outer_cell_size.y + 1.0;
                                 }
                                 if grid_column_index == 1 {
-                                    cell_clip_rect.min.x = table_max_rect.min.x + outer_cell_size.x;
+                                    cell_clip_rect.min.x = table_max_rect.min.x + outer_cell_size.x + 1.0;
                                 }
                                 let cell_clip_rect = cell_clip_rect.intersect(parent_clip_rect);
 
@@ -729,7 +729,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     table_height += cell_clip_rect.size().y + 1.0;
                                 }
                             }
-                            accumulated_row_heights += outer_row_height;
+                            accumulated_row_heights += outer_row_height + 1.0;
                         }
 
                         trace!("cells");
@@ -755,7 +755,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             row_counter = cell_origin.row + 1 - first_row_filtered_count;
 
                             // start with an offset equal to header height, which is currently using the cell_size
-                            let mut accumulated_row_heights = outer_cell_size.y;
+                            let mut accumulated_row_heights = outer_cell_size.y + 1.0;
                             for grid_row_index in 1..=visible_row_count {
                                 if grid_row_index + cell_origin.row > dimensions.row_count {
                                     break
@@ -780,7 +780,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let y = start_pos.y + accumulated_row_heights;
 
                                 // start with an offset equal to header width, which is currently using the cell_size
-                                let mut accumulated_column_widths = outer_cell_size.x;
+                                let mut accumulated_column_widths = outer_cell_size.x + 1.0;
 
                                 for grid_column_index in 1..=visible_column_count {
                                     if grid_column_index + cell_origin.column > dimensions.column_count {
@@ -806,7 +806,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     };
 
                                     let x = start_pos.x + accumulated_column_widths;
-                                    accumulated_column_widths += outer_column_width;
+                                    accumulated_column_widths += outer_column_width + 1.0;
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
                                     let cell_clip_rect = cell_rect.intersect(cells_clip_rect);
@@ -857,7 +857,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     data_source.render_cell(&mut cell_ui, cell_index);
                                 }
-                                accumulated_row_heights += outer_row_height;
+                                accumulated_row_heights += outer_row_height + 1.0;
                             }
                         });
 
@@ -867,11 +867,11 @@ impl<DataSource> DeferredTable<DataSource> {
                         let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
-                            .hline(table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + outer_cell_size.y, line_stroke);
+                            .hline(table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + outer_cell_size.y + 1.0, line_stroke);
 
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
-                            .vline(table_max_rect.min.x + outer_cell_size.x, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
+                            .vline(table_max_rect.min.x + outer_cell_size.x + 1.0, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
                     });
             });
         });
