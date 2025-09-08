@@ -808,7 +808,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let x = start_pos.x + accumulated_column_widths;
                                     accumulated_column_widths += outer_column_width;
 
-                                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width - 1.0, outer_row_height - 1.0).into());
+                                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
                                     let cell_clip_rect = cell_rect.intersect(cells_clip_rect);
                                     let cell_clip_rect_size = cell_clip_rect.size();
 
