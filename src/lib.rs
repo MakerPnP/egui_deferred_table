@@ -1,7 +1,7 @@
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, Context, CornerRadius, Id, PopupAnchor, Pos2, Rect, Response, Sense, StrokeKind,
-    Style, Tooltip, Ui, UiBuilder, Vec2,
+    Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect,
+    Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
 use log::{info, trace};
@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 const SHOW_HEADER_CELL_BORDERS: bool = false;
-const SHOW_CELL_BORDERS: bool = true;
+const SHOW_CELL_BORDERS: bool = false;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
@@ -115,10 +115,26 @@ impl<DataSource> DeferredTable<DataSource> {
             style.spacing.interact_size.y,
         ));
 
+        // XXX - remove this temporary hard-coded value
+        // let inner_cell_size: Vec2 = (50.0, 25.0).into();
+
         let outer_cell_size = Self::outer_size(inner_cell_size, style);
 
-        // XXX - remove this temporary hard-coded value
-        // let cell_size: Vec2 = (50.0, 25.0).into();
+        // FIXME if the column/row is too narrow/short then the hover/drag isn't detected, even though it's visible.
+        //       to replicate, set 3 columns/rows to their minimum width/heights and then try resizing the middle one.
+        //       as a workaround we clamp the minimum column/row width/heights to this.
+        let minimum_resize_size = (style.interaction.resize_grab_radius_side * 2.0) + 2.0;
+
+        let mut clear_drag_state = false;
+
+        enum DragAction {
+            SetWidth(usize, f32),
+            SetHeight(usize, f32),
+        }
+        let mut drag_action = None;
+
+        let pointer_pos = ui.ctx().pointer_latest_pos();
+
         let temp_state_id = self.id.with("temp_state");
         let mut temp_state = DeferredTableTempState::load_or_default(&ctx, temp_state_id);
 
@@ -178,7 +194,7 @@ impl<DataSource> DeferredTable<DataSource> {
             if state.column_widths.len() < dimensions.column_count {
                 // Note: We do not truncate the column widths, so that if a data source has `n` columns, then later `< n` columns
                 //       then later again `>= n` columns, the previously used columns widths still apply.
-                state.column_widths.resize(dimensions.column_count, outer_cell_size.x);
+                state.column_widths.resize(dimensions.column_count, inner_cell_size.x);
 
                 // apply default widths
                 builder.table.columns.iter().for_each(|(index, column)| {
@@ -192,7 +208,7 @@ impl<DataSource> DeferredTable<DataSource> {
             if state.row_heights.len() < dimensions.row_count {
                 // Note: We do not truncate the row heights, so that if a data source has `n` rows, then later `< n` rows
                 //       then later again `>= n` rows, the previously used rows heights still apply.
-                state.row_heights.resize(dimensions.row_count, outer_cell_size.y);
+                state.row_heights.resize(dimensions.row_count, inner_cell_size.y);
             }
 
             // XXX - remove this temporary hard-coded value
@@ -223,14 +239,14 @@ impl<DataSource> DeferredTable<DataSource> {
             let outer_inner_half_difference = outer_inner_difference / 2.0;
 
             // add the width/height of the column/row headers to the sum of the column widths/row heights, respectively.
-            let total_content_width = state.column_widths.iter().sum::<f32>() + (outer_inner_difference.x * dimensions.column_count as f32) + outer_cell_size.x;
-            let total_content_height = state.row_heights.iter().sum::<f32>() + (outer_inner_difference.y * dimensions.row_count as f32) + outer_cell_size.y;
+            let total_content_width = state.column_widths.iter().sum::<f32>() + ((outer_inner_difference.x + 1.0) * dimensions.column_count as f32) + outer_cell_size.x;
+            let total_content_height = state.row_heights.iter().sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
 
             let columns_to_filter = data_source.columns_to_filter();
             let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
                 columns.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x).unwrap_or(0.0)
+                    state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()
             });
 
@@ -238,7 +254,7 @@ impl<DataSource> DeferredTable<DataSource> {
             let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
                 rows.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y).unwrap_or(0.0)
+                    state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()
             });
 
@@ -331,12 +347,12 @@ impl<DataSource> DeferredTable<DataSource> {
                         }
 
                         // use the cells_viewport_rect for upper left and origin calculation
-                        let (first_column, first_column_index, first_column_visible_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x).unwrap();
-                        let (first_row, first_row_index, first_row_visible_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y).unwrap();
+                        let (first_column, first_column_index, first_column_visible_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x + 1.0).unwrap();
+                        let (first_row, first_row_index, first_row_visible_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y + 1.0).unwrap();
 
                         // use the total viewport (including header area) to find the last column and row
-                        let (last_column, _last_column_index, last_column_visible_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x).unwrap();
-                        let (last_row, _last_row_index, last_row_visible_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y).unwrap();
+                        let (last_column, _last_column_index, last_column_visible_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x + 1.0).unwrap();
+                        let (last_row, _last_row_index, last_row_visible_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y + 1.0).unwrap();
 
                         // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
                         // are outside of this rect
@@ -442,7 +458,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let mut y = start_pos.y + accumulated_row_heights;
                                 let mut x = start_pos.x + accumulated_column_widths;
-                                accumulated_column_widths += outer_column_width;
+                                accumulated_column_widths += outer_column_width + 1.0;
 
                                 if grid_row_index == 0 {
                                     y = table_max_rect.min.y;
@@ -452,13 +468,14 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
+
                                 let mut cell_clip_rect = cell_rect.intersect(translated_viewport_rect);
 
                                 if grid_row_index == 1 {
-                                    cell_clip_rect.min.y = table_max_rect.min.y + outer_cell_size.y;
+                                    cell_clip_rect.min.y = table_max_rect.min.y + outer_cell_size.y + 1.0;
                                 }
                                 if grid_column_index == 1 {
-                                    cell_clip_rect.min.x = table_max_rect.min.x + outer_cell_size.x;
+                                    cell_clip_rect.min.x = table_max_rect.min.x + outer_cell_size.x + 1.0;
                                 }
                                 let cell_clip_rect = cell_clip_rect.intersect(parent_clip_rect);
 
@@ -482,6 +499,139 @@ impl<DataSource> DeferredTable<DataSource> {
                                     continue;
                                 }
 
+                                let bg_color = if grid_row_index == 0 {
+                                    header_row_bg_color
+                                } else {
+                                    row_bg_color
+                                };
+
+                                let cell_painter = ui.painter()
+                                    .with_clip_rect(cell_clip_rect);
+
+                                cell_painter
+                                    .rect_filled(cell_rect, 0.0, bg_color);
+
+                                if SHOW_HEADER_CELL_BORDERS {
+                                    cell_painter
+                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                }
+
+                                let resize_painter = ui.painter()
+                                    .with_clip_rect(parent_clip_rect);
+
+                                let mut drag_tooltip_message = None;
+
+                                if matches!(item, GridItem::Column) {
+                                    let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
+
+                                    let p1 = Pos2::new(cell_rect.right() + 1.0, cell_rect.top());
+                                    let p2 = Pos2::new(cell_rect.right() + 1.0, cell_rect.bottom());
+                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
+
+                                    // let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
+
+                                    let resize_interact_rect = resize_line_rect
+                                        .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
+
+                                    if false {
+                                        ui.painter().debug_rect(resize_interact_rect, Color32::MAGENTA, "r");
+                                    }
+
+                                    let resize_response =
+                                        ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
+
+                                    if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_column_index, start_pos, item, initial_size: outer_column_width });
+                                    }
+
+                                    if resize_response.drag_stopped() {
+                                        clear_drag_state = true;
+                                    }
+
+                                    let dragging = match temp_state.drag_state {
+                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_column_index && drag_item == item => {
+                                            // dragging this column
+                                            let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
+                                            let new_outer_column_width = initial_size + drag_delta.x;
+                                            let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
+                                            let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
+
+                                            if new_column_width != inner_column_width {
+                                                // change at the end of the frame to avoid cells being the old size.
+                                                drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
+                                            }
+                                            drag_tooltip_message = Some(format!("{}", new_column_width));
+
+                                            true
+                                        },
+                                        _ => false
+                                    };
+
+                                    let resize_hovered = resize_response.hovered();
+                                    if resize_hovered || dragging {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                                    }
+
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
+                                }
+
+                                if matches!(item, GridItem::Row) {
+                                    let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
+
+                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom());
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
+                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
+                                    let resize_interact_rect = resize_line_rect
+                                        .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
+
+                                    let resize_response =
+                                        ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
+
+                                    if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, item, initial_size: outer_row_height });
+                                    }
+
+                                    if resize_response.drag_stopped() {
+                                        clear_drag_state = true;
+                                    }
+
+                                    let dragging = match temp_state.drag_state {
+                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_row_index && drag_item == item => {
+                                            // dragging this row
+                                            let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
+                                            let new_outer_row_height = initial_size + drag_delta.y;
+                                            let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
+                                            let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
+
+                                            if new_row_height != inner_row_height {
+                                                // change at the end of the frame to avoid cells being the old size.
+                                                drag_action = Some(DragAction::SetHeight(mapped_row_index, new_row_height));
+                                            }
+                                            drag_tooltip_message = Some(format!("{}", new_row_height));
+
+                                            true
+                                        }
+                                        _ => false
+                                    };
+
+                                    let resize_hovered = resize_response.hovered();
+                                    if resize_hovered || dragging {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
+                                    }
+
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
+                                }
+
+                                if let Some(message) = drag_tooltip_message {
+                                    Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_resize_".into(), PopupAnchor::Pointer)
+                                        .gap(12.0)
+                                        .show(|ui|{
+                                            ui.horizontal(|ui|{
+                                                ui.label(message);
+                                            });
+                                        });
+                                }
+
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
                                 struct DndPayload {
@@ -501,22 +651,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 if let Some(payload) = payload {
                                     response.dnd_set_drag_payload(payload);
-                                }
-
-                                let bg_color = if grid_row_index == 0 {
-                                    header_row_bg_color
-                                } else {
-                                    row_bg_color
-                                };
-
-                                ui.painter()
-                                    .with_clip_rect(cell_clip_rect)
-                                    .rect_filled(cell_rect, 0.0, bg_color);
-
-                                if SHOW_HEADER_CELL_BORDERS {
-                                    ui.painter()
-                                        .with_clip_rect(cell_clip_rect)
-                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
                                 }
 
                                 let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_inner_rect));
@@ -592,18 +726,18 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 if grid_row_index == 0 {
-                                    table_width += cell_clip_rect.size().x;
+                                    table_width += cell_clip_rect.size().x + 1.0;
                                 }
                                 if grid_column_index == 0 {
-                                    table_height += cell_clip_rect.size().y;
+                                    table_height += cell_clip_rect.size().y + 1.0;
                                 }
                             }
-                            accumulated_row_heights += outer_row_height;
+                            accumulated_row_heights += outer_row_height + 1.0;
                         }
 
                         trace!("cells");
 
-                        let cells_clip_rect = Rect::from_min_max(table_max_rect.min + outer_cell_size, translated_viewport_rect.max).intersect(parent_clip_rect);
+                        let cells_clip_rect = Rect::from_min_max((table_max_rect.min + outer_cell_size) + Vec2::splat(1.0), translated_viewport_rect.max).intersect(parent_clip_rect);
                         if false {
                             ui.painter().debug_rect(cells_clip_rect, Color32::CYAN, "cr");
                         }
@@ -624,7 +758,7 @@ impl<DataSource> DeferredTable<DataSource> {
                             row_counter = cell_origin.row + 1 - first_row_filtered_count;
 
                             // start with an offset equal to header height, which is currently using the cell_size
-                            let mut accumulated_row_heights = outer_cell_size.y;
+                            let mut accumulated_row_heights = outer_cell_size.y + 1.0;
                             for grid_row_index in 1..=visible_row_count {
                                 if grid_row_index + cell_origin.row > dimensions.row_count {
                                     break
@@ -649,7 +783,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let y = start_pos.y + accumulated_row_heights;
 
                                 // start with an offset equal to header width, which is currently using the cell_size
-                                let mut accumulated_column_widths = outer_cell_size.x;
+                                let mut accumulated_column_widths = outer_cell_size.x + 1.0;
 
                                 for grid_column_index in 1..=visible_column_count {
                                     if grid_column_index + cell_origin.column > dimensions.column_count {
@@ -675,7 +809,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     };
 
                                     let x = start_pos.x + accumulated_column_widths;
-                                    accumulated_column_widths += outer_column_width;
+                                    accumulated_column_widths += outer_column_width + 1.0;
 
                                     let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
                                     let cell_clip_rect = cell_rect.intersect(cells_clip_rect);
@@ -726,9 +860,12 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     data_source.render_cell(&mut cell_ui, cell_index);
                                 }
-                                accumulated_row_heights += outer_row_height;
+                                accumulated_row_heights += outer_row_height + 1.0;
                             }
                         });
+
+                        table_width -= 1.0;
+                        table_height -= 1.0;
 
                         let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
@@ -737,15 +874,60 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
-                            .vline(table_max_rect.min.x + outer_cell_size.x, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
+                            .vline(table_max_rect.min.x + outer_cell_size.x + 1.0, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
                     });
             });
         });
+
+        if clear_drag_state {
+            temp_state.drag_state = None;
+        }
+
+        let repaint = match drag_action.take() {
+            None => false,
+            Some(DragAction::SetWidth(index, new_width)) => {
+                state.column_widths[index] = new_width;
+                true
+            }
+            Some(DragAction::SetHeight(index, new_height)) => {
+                state.row_heights[index] = new_height;
+                true
+            }
+        };
+
+        if repaint {
+            ui.ctx().request_repaint();
+        }
 
         DeferredTablePersistentState::store(ui.ctx(), persistent_state_id, state);
         DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
+    }
+
+    fn paint_resize_handle(
+        ui: &mut Ui,
+        resize_line_rect: Rect,
+        resize_response: Response,
+        resize_hovered: bool,
+        cell_painter: &Painter,
+    ) {
+        let stroke = if resize_response.dragged() {
+            ui.style().visuals.widgets.active.bg_stroke
+        } else if resize_hovered {
+            ui.style().visuals.widgets.hovered.bg_stroke
+        } else {
+            // ui.visuals().widgets.inactive.bg_stroke
+            ui.visuals().widgets.noninteractive.bg_stroke
+        };
+
+        cell_painter.rect_stroke(
+            resize_line_rect,
+            CornerRadius::ZERO,
+            stroke,
+            StrokeKind::Middle,
+        );
+        //cell_painter.line_segment([resize_line_rect.min, resize_line_rect.max], stroke);
     }
 
     fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
@@ -780,7 +962,7 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum GridItem {
     Corner,
     Column,
@@ -891,6 +1073,16 @@ impl DeferredTablePersistentState {
 struct DeferredTableTempState {
     /// holds the index of the top-left cell
     cell_origin: CellIndex,
+
+    drag_state: Option<DragState>,
+}
+
+#[derive(Clone, Copy)]
+struct DragState {
+    index: usize,
+    start_pos: Pos2,
+    item: GridItem,
+    initial_size: f32,
 }
 
 impl DeferredTableTempState {
