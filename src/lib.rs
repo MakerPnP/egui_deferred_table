@@ -107,13 +107,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let mut actions = vec![];
 
-        let inner_cell_size: Vec2 = self.parameters.default_cell_size.unwrap_or(Vec2::new(
-            style.spacing.interact_size.x * 1.5,
-            style.spacing.interact_size.y,
-        ));
+        // let inner_cell_size: Vec2 = self.parameters.default_cell_size.unwrap_or(Vec2::new(
+        //     style.spacing.interact_size.x * 1.5,
+        //     style.spacing.interact_size.y,
+        // ));
 
-        // // XXX - remove this temporary hard-coded value
-        // let inner_cell_size: Vec2 = (50.0, 25.0).into();
+        // XXX - remove this temporary hard-coded value
+        let inner_cell_size: Vec2 = (50.0, 25.0).into();
 
         let outer_cell_size = Self::outer_size(inner_cell_size, style);
 
@@ -344,12 +344,12 @@ impl<DataSource> DeferredTable<DataSource> {
                         }
 
                         // use the cells_viewport_rect for upper left and origin calculation
-                        let (first_column, first_column_index, first_column_visible_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x).unwrap();
-                        let (first_row, first_row_index, first_row_visible_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y).unwrap();
+                        let (first_column, first_column_index, first_column_visible_index, first_column_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x + 1.0).unwrap();
+                        let (first_row, first_row_index, first_row_visible_index, first_row_filtered_count) = range_and_index_for_offset(cells_viewport_rect.min.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y + 1.0).unwrap();
 
                         // use the total viewport (including header area) to find the last column and row
-                        let (last_column, _last_column_index, last_column_visible_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x).unwrap();
-                        let (last_row, _last_row_index, last_row_visible_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y).unwrap();
+                        let (last_column, _last_column_index, last_column_visible_index, last_column_filtered_count) = range_and_index_for_offset(viewport_rect.max.x, &state.column_widths, &column_ordering, &columns_to_filter, outer_inner_difference.x + 1.0).unwrap();
+                        let (last_row, _last_row_index, last_row_visible_index, last_row_filtered_count) = range_and_index_for_offset(viewport_rect.max.y, &state.row_heights, &row_ordering, &rows_to_filter, outer_inner_difference.y + 1.0).unwrap();
 
                         // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
                         // are outside of this rect
@@ -575,8 +575,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Row) {
                                     let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
 
-                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom() + 1.0);
-                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom() + 1.0);
+                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom());
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
                                     let resize_line_rect = egui::Rect::from_min_max(p1, p2);
                                     let resize_interact_rect = resize_line_rect
                                         .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
@@ -867,7 +867,7 @@ impl<DataSource> DeferredTable<DataSource> {
                         let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
-                            .hline(table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + outer_cell_size.y + 1.0, line_stroke);
+                            .hline(table_max_rect.min.x..=table_max_rect.min.x + table_width, table_max_rect.min.y + outer_cell_size.y, line_stroke);
 
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
