@@ -127,6 +127,8 @@ impl<DataSource> DeferredTable<DataSource> {
         }
         let mut drag_action = None;
 
+        let pointer_pos = ui.ctx().pointer_latest_pos();
+
         // XXX - remove this temporary hard-coded value
         // let cell_size: Vec2 = (50.0, 25.0).into();
         let temp_state_id = self.id.with("temp_state");
@@ -508,8 +510,6 @@ impl<DataSource> DeferredTable<DataSource> {
                                     cell_painter
                                         .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
                                 }
-
-                                let pointer_pos = ui.ctx().pointer_latest_pos();
 
                                 let resize_painter = ui.painter()
                                     .with_clip_rect(parent_clip_rect);
