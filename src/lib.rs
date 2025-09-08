@@ -464,10 +464,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     x = table_max_rect.min.x;
                                 }
 
-                                let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width - 1.0, outer_row_height - 1.0).into());
-                                // these debug asserts are here to remind us from_min_size creates an INCLUSIVE rectangle
-                                debug_assert_ne!(cell_rect.size().y, outer_row_height);
-                                debug_assert_ne!(cell_rect.size().x, outer_column_width);
+                                let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
 
                                 let mut cell_clip_rect = cell_rect.intersect(translated_viewport_rect);
 
