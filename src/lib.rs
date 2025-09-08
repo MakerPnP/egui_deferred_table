@@ -1,8 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{
-    Color32, Context, CornerRadius, Id, PopupAnchor, Pos2, Rect, Response, Sense, StrokeKind,
-    Style, Tooltip, Ui, UiBuilder, Vec2,
-};
+use egui::{Color32, Context, CornerRadius, Id, Painter, PopupAnchor, Pos2, Rangef, Rect, Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 use log::{info, trace};
 use std::fmt::Display;
@@ -116,6 +113,11 @@ impl<DataSource> DeferredTable<DataSource> {
         ));
 
         let outer_cell_size = Self::outer_size(inner_cell_size, style);
+
+        // FIXME if the column/row is too narrow/short then the hover/drag isn't detected, even though it's visible.
+        //       to replicate, set 3 columns/rows to their minimum width/heights and then try resizing the middle one.
+        //       as a workaround we clamp the minimum column/row width/heights to this.
+        let minimum_resize_size = (style.interaction.resize_grab_radius_side * 2.0) + 2.0;
 
         // XXX - remove this temporary hard-coded value
         // let cell_size: Vec2 = (50.0, 25.0).into();
@@ -482,6 +484,87 @@ impl<DataSource> DeferredTable<DataSource> {
                                     continue;
                                 }
 
+                                let bg_color = if grid_row_index == 0 {
+                                    header_row_bg_color
+                                } else {
+                                    row_bg_color
+                                };
+
+                                let cell_painter = ui.painter()
+                                    .with_clip_rect(cell_clip_rect);
+
+                                cell_painter
+                                    .rect_filled(cell_rect, 0.0, bg_color);
+
+                                if SHOW_HEADER_CELL_BORDERS {
+                                    cell_painter
+                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
+                                }
+
+                                let resize_painter = ui.painter()
+                                    .with_clip_rect(parent_clip_rect);
+
+                                if matches!(item, GridItem::Column) {
+                                    let column_resize_id = ui.id().with("resize_column").with(grid_column_index);
+
+                                    let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
+                                    let resize_interact_rect = resize_line_rect
+                                        .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
+
+                                    ui.painter().debug_rect(resize_interact_rect, Color32::MAGENTA, "r");
+
+                                    let resize_response =
+                                        ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
+
+                                    if resize_response.dragged() {
+                                        let drag_delta = resize_response.drag_delta();
+
+                                        let new_outer_column_width = outer_column_width + drag_delta.x;
+                                        let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
+                                        let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
+                                        state.column_widths[mapped_column_index] = new_column_width;
+                                    }
+
+                                    let dragging_something_else =
+                                        ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
+                                    let resize_hover = resize_response.hovered() && !dragging_something_else;
+
+                                    if resize_hover || resize_response.dragged() {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                                    }
+
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hover, &resize_painter);
+                                }
+
+                                if matches!(item, GridItem::Row) {
+                                    let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
+
+                                    let resize_line_rect = egui::Rect::from_min_max(cell_rect.left_bottom(), cell_rect.right_bottom());
+                                    let resize_interact_rect = resize_line_rect
+                                        .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
+
+                                    let resize_response =
+                                        ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
+
+                                    if resize_response.dragged() {
+                                        let drag_delta = resize_response.drag_delta();
+                                        let new_outer_row_height = outer_row_height + drag_delta.y;
+                                        let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
+                                        let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
+                                        state.row_heights[mapped_row_index] = new_row_height;
+                                    }
+
+                                    let dragging_something_else =
+                                        ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
+                                    let resize_hover = resize_response.hovered() && !dragging_something_else;
+
+                                    if resize_hover || resize_response.dragged() {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
+                                    }
+
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hover, &resize_painter);
+                                }
+
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
                                 struct DndPayload {
@@ -501,22 +584,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 if let Some(payload) = payload {
                                     response.dnd_set_drag_payload(payload);
-                                }
-
-                                let bg_color = if grid_row_index == 0 {
-                                    header_row_bg_color
-                                } else {
-                                    row_bg_color
-                                };
-
-                                ui.painter()
-                                    .with_clip_rect(cell_clip_rect)
-                                    .rect_filled(cell_rect, 0.0, bg_color);
-
-                                if SHOW_HEADER_CELL_BORDERS {
-                                    ui.painter()
-                                        .with_clip_rect(cell_clip_rect)
-                                        .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
                                 }
 
                                 let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_inner_rect));
@@ -746,6 +813,19 @@ impl<DataSource> DeferredTable<DataSource> {
         DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
+    }
+
+    fn paint_resize_handle(ui: &mut Ui, resize_line_rect: Rect, resize_response: Response, resize_hover: bool, cell_painter: &Painter) {
+        let stroke = if resize_response.dragged() {
+            ui.style().visuals.widgets.active.bg_stroke
+        } else if resize_hover {
+            ui.style().visuals.widgets.hovered.bg_stroke
+        } else {
+            // ui.visuals().widgets.inactive.bg_stroke
+            ui.visuals().widgets.noninteractive.bg_stroke
+        };
+
+        cell_painter.rect_stroke(resize_line_rect, CornerRadius::ZERO, stroke, StrokeKind::Middle);
     }
 
     fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
