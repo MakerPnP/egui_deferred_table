@@ -190,7 +190,7 @@ impl<DataSource> DeferredTable<DataSource> {
             if state.column_widths.len() < dimensions.column_count {
                 // Note: We do not truncate the column widths, so that if a data source has `n` columns, then later `< n` columns
                 //       then later again `>= n` columns, the previously used columns widths still apply.
-                state.column_widths.resize(dimensions.column_count, outer_cell_size.x);
+                state.column_widths.resize(dimensions.column_count, inner_cell_size.x);
 
                 // apply default widths
                 builder.table.columns.iter().for_each(|(index, column)| {
@@ -204,7 +204,7 @@ impl<DataSource> DeferredTable<DataSource> {
             if state.row_heights.len() < dimensions.row_count {
                 // Note: We do not truncate the row heights, so that if a data source has `n` rows, then later `< n` rows
                 //       then later again `>= n` rows, the previously used rows heights still apply.
-                state.row_heights.resize(dimensions.row_count, outer_cell_size.y);
+                state.row_heights.resize(dimensions.row_count, inner_cell_size.y);
             }
 
             // XXX - remove this temporary hard-coded value
