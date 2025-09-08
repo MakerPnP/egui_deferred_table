@@ -734,7 +734,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         trace!("cells");
 
-                        let cells_clip_rect = Rect::from_min_max(table_max_rect.min + outer_cell_size, translated_viewport_rect.max).intersect(parent_clip_rect);
+                        let cells_clip_rect = Rect::from_min_max((table_max_rect.min + outer_cell_size) + Vec2::splat(1.0), translated_viewport_rect.max).intersect(parent_clip_rect);
                         if false {
                             ui.painter().debug_rect(cells_clip_rect, Color32::CYAN, "cr");
                         }
