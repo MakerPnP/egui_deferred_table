@@ -521,7 +521,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_inner_rect));
                                 cell_ui.set_clip_rect(cell_inner_clip_rect);
-                                cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                                let style = cell_ui.style_mut();
+                                style.wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                 let label = match item {
                                     GridItem::Corner => {
