@@ -112,6 +112,9 @@ impl<DataSource> DeferredTable<DataSource> {
             style.spacing.interact_size.y,
         ));
 
+        // // XXX - remove this temporary hard-coded value
+        // let inner_cell_size: Vec2 = (50.0, 25.0).into();
+
         let outer_cell_size = Self::outer_size(inner_cell_size, style);
 
         // FIXME if the column/row is too narrow/short then the hover/drag isn't detected, even though it's visible.
@@ -129,8 +132,6 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let pointer_pos = ui.ctx().pointer_latest_pos();
 
-        // XXX - remove this temporary hard-coded value
-        // let cell_size: Vec2 = (50.0, 25.0).into();
         let temp_state_id = self.id.with("temp_state");
         let mut temp_state = DeferredTableTempState::load_or_default(&ctx, temp_state_id);
 
