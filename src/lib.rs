@@ -1,5 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect, Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2};
+use egui::{Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect, Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 use log::{info, trace};
 use std::fmt::Display;
