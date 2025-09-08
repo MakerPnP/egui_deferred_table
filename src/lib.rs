@@ -118,7 +118,14 @@ impl<DataSource> DeferredTable<DataSource> {
         //       to replicate, set 3 columns/rows to their minimum width/heights and then try resizing the middle one.
         //       as a workaround we clamp the minimum column/row width/heights to this.
         let minimum_resize_size = (style.interaction.resize_grab_radius_side * 2.0) + 2.0;
+
         let mut clear_drag_state = false;
+
+        enum DragAction {
+            SetWidth(usize, f32),
+            SetHeight(usize, f32),
+        }
+        let mut drag_action = None;
 
         // XXX - remove this temporary hard-coded value
         // let cell_size: Vec2 = (50.0, 25.0).into();
@@ -507,6 +514,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let resize_painter = ui.painter()
                                     .with_clip_rect(parent_clip_rect);
 
+                                let mut drag_tooltip_message = None;
+
                                 if matches!(item, GridItem::Column) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
@@ -514,7 +523,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let resize_interact_rect = resize_line_rect
                                         .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
 
-                                    ui.painter().debug_rect(resize_interact_rect, Color32::MAGENTA, "r");
+                                    if false {
+                                        ui.painter().debug_rect(resize_interact_rect, Color32::MAGENTA, "r");
+                                    }
 
                                     let resize_response =
                                         ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
@@ -531,17 +542,14 @@ impl<DataSource> DeferredTable<DataSource> {
                                         Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_column_index && drag_item == item => {
                                             // dragging this column
                                             let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
-                                            println!("drag_delta: {:?}", drag_delta);
                                             let new_outer_column_width = initial_size + drag_delta.x;
                                             let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
                                             let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
 
-                                            // TODO change at the end of the frame to avoid cells being the old size.
-                                            state.column_widths[mapped_column_index] = new_column_width;
+                                            // change at the end of the frame to avoid cells being the old size.
+                                            drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
+                                            drag_tooltip_message = Some(format!("{}", new_column_width));
 
-                                            // ui.input(|i| {if i.pointer.any_down() == false {
-                                            //     clear_drag_state = true;
-                                            // }});
                                             true
                                         },
                                         _ => false
@@ -581,8 +589,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                             let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
                                             let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
 
-                                            // TODO change at the end of the frame to avoid cells being the old size.
-                                            state.row_heights[mapped_row_index] = new_row_height;
+                                            // change at the end of the frame to avoid cells being the old size.
+                                            drag_action = Some(DragAction::SetHeight(mapped_row_index, new_row_height));
+                                            drag_tooltip_message = Some(format!("{}", new_row_height));
 
                                             true
                                         }
@@ -595,6 +604,16 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
 
                                     Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
+                                }
+
+                                if let Some(message) = drag_tooltip_message {
+                                    Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_resize_".into(), PopupAnchor::Pointer)
+                                        .gap(12.0)
+                                        .show(|ui|{
+                                            ui.horizontal(|ui|{
+                                                ui.label(message);
+                                            });
+                                        });
                                 }
 
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
@@ -843,6 +862,22 @@ impl<DataSource> DeferredTable<DataSource> {
 
         if clear_drag_state {
             temp_state.drag_state = None;
+        }
+
+        let repaint = match drag_action.take() {
+            None => false,
+            Some(DragAction::SetWidth(index, new_width)) => {
+                state.column_widths[index] = new_width;
+                true
+            }
+            Some(DragAction::SetHeight(index, new_height)) => {
+                state.row_heights[index] = new_height;
+                true
+            }
+        };
+
+        if repaint {
+            ui.ctx().request_repaint();
         }
 
         DeferredTablePersistentState::store(ui.ctx(), persistent_state_id, state);
