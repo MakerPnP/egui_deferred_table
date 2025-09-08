@@ -546,8 +546,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                             let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
                                             let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
 
-                                            // change at the end of the frame to avoid cells being the old size.
-                                            drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
+                                            if new_column_width != inner_column_width {
+                                                // change at the end of the frame to avoid cells being the old size.
+                                                drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
+                                            }
                                             drag_tooltip_message = Some(format!("{}", new_column_width));
 
                                             true
@@ -589,8 +591,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                             let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
                                             let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
 
-                                            // change at the end of the frame to avoid cells being the old size.
-                                            drag_action = Some(DragAction::SetHeight(mapped_row_index, new_row_height));
+                                            if new_row_height != inner_row_height {
+                                                // change at the end of the frame to avoid cells being the old size.
+                                                drag_action = Some(DragAction::SetHeight(mapped_row_index, new_row_height));
+                                            }
                                             drag_tooltip_message = Some(format!("{}", new_row_height));
 
                                             true
