@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 const SHOW_HEADER_CELL_BORDERS: bool = false;
-const SHOW_CELL_BORDERS: bool = true;
+const SHOW_CELL_BORDERS: bool = false;
 
 pub struct DeferredTable<DataSource> {
     id: Id,
@@ -463,7 +463,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     x = table_max_rect.min.x;
                                 }
 
-                                let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
+                                let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width - 1.0, outer_row_height - 1.0).into());
                                 let mut cell_clip_rect = cell_rect.intersect(translated_viewport_rect);
 
                                 if grid_row_index == 1 {
@@ -519,7 +519,12 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Column) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
-                                    let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
+                                    let p1 = Pos2::new(cell_rect.right() - 1.0, cell_rect.top());
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
+                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
+
+                                    // let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
+
                                     let resize_interact_rect = resize_line_rect
                                         .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
 
@@ -568,7 +573,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Row) {
                                     let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
 
-                                    let resize_line_rect = egui::Rect::from_min_max(cell_rect.left_bottom(), cell_rect.right_bottom());
+                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom() - 1.0);
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
+                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
                                     let resize_interact_rect = resize_line_rect
                                         .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
 
@@ -714,10 +721,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 }
 
                                 if grid_row_index == 0 {
-                                    table_width += cell_clip_rect.size().x;
+                                    table_width += cell_clip_rect.size().x + 1.0;
                                 }
                                 if grid_column_index == 0 {
-                                    table_height += cell_clip_rect.size().y;
+                                    table_height += cell_clip_rect.size().y + 1.0;
                                 }
                             }
                             accumulated_row_heights += outer_row_height;
@@ -799,7 +806,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let x = start_pos.x + accumulated_column_widths;
                                     accumulated_column_widths += outer_column_width;
 
-                                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width, outer_row_height).into());
+                                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), (outer_column_width - 1.0, outer_row_height - 1.0).into());
                                     let cell_clip_rect = cell_rect.intersect(cells_clip_rect);
                                     let cell_clip_rect_size = cell_clip_rect.size();
 
@@ -852,6 +859,9 @@ impl<DataSource> DeferredTable<DataSource> {
                             }
                         });
 
+                        table_width -= 1.0;
+                        table_height -= 1.0;
+
                         let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
@@ -901,6 +911,7 @@ impl<DataSource> DeferredTable<DataSource> {
         };
 
         cell_painter.rect_stroke(resize_line_rect, CornerRadius::ZERO, stroke, StrokeKind::Middle);
+        //cell_painter.line_segment([resize_line_rect.min, resize_line_rect.max], stroke);
     }
 
     fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
