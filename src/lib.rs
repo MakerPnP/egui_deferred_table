@@ -521,8 +521,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Column) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
-                                    let p1 = Pos2::new(cell_rect.right() - 1.0, cell_rect.top());
-                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
+                                    let p1 = Pos2::new(cell_rect.right() + 1.0, cell_rect.top());
+                                    let p2 = Pos2::new(cell_rect.right() + 1.0, cell_rect.bottom());
                                     let resize_line_rect = egui::Rect::from_min_max(p1, p2);
 
                                     // let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
@@ -575,8 +575,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Row) {
                                     let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
 
-                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom() - 1.0);
-                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
+                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom() + 1.0);
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom() + 1.0);
                                     let resize_line_rect = egui::Rect::from_min_max(p1, p2);
                                     let resize_interact_rect = resize_line_rect
                                         .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
