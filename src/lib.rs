@@ -1,5 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{Color32, Context, CornerRadius, Id, Painter, PopupAnchor, Pos2, Rangef, Rect, Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2};
+use egui::{Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect, Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2};
 use indexmap::IndexMap;
 use log::{info, trace};
 use std::fmt::Display;
@@ -118,6 +118,7 @@ impl<DataSource> DeferredTable<DataSource> {
         //       to replicate, set 3 columns/rows to their minimum width/heights and then try resizing the middle one.
         //       as a workaround we clamp the minimum column/row width/heights to this.
         let minimum_resize_size = (style.interaction.resize_grab_radius_side * 2.0) + 2.0;
+        let mut clear_drag_state = false;
 
         // XXX - remove this temporary hard-coded value
         // let cell_size: Vec2 = (50.0, 25.0).into();
@@ -501,11 +502,13 @@ impl<DataSource> DeferredTable<DataSource> {
                                         .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
                                 }
 
+                                let pointer_pos = ui.ctx().pointer_latest_pos();
+
                                 let resize_painter = ui.painter()
                                     .with_clip_rect(parent_clip_rect);
 
                                 if matches!(item, GridItem::Column) {
-                                    let column_resize_id = ui.id().with("resize_column").with(grid_column_index);
+                                    let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
                                     let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
                                     let resize_interact_rect = resize_line_rect
@@ -516,24 +519,40 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let resize_response =
                                         ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
 
-                                    if resize_response.dragged() {
-                                        let drag_delta = resize_response.drag_delta();
-
-                                        let new_outer_column_width = outer_column_width + drag_delta.x;
-                                        let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
-                                        let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
-                                        state.column_widths[mapped_column_index] = new_column_width;
+                                    if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_column_index, start_pos, item, initial_size: outer_column_width });
                                     }
 
-                                    let dragging_something_else =
-                                        ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
-                                    let resize_hover = resize_response.hovered() && !dragging_something_else;
+                                    if resize_response.drag_stopped() {
+                                        clear_drag_state = true;
+                                    }
 
-                                    if resize_hover || resize_response.dragged() {
+                                    let dragging = match temp_state.drag_state {
+                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_column_index && drag_item == item => {
+                                            // dragging this column
+                                            let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
+                                            println!("drag_delta: {:?}", drag_delta);
+                                            let new_outer_column_width = initial_size + drag_delta.x;
+                                            let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
+                                            let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
+
+                                            // TODO change at the end of the frame to avoid cells being the old size.
+                                            state.column_widths[mapped_column_index] = new_column_width;
+
+                                            // ui.input(|i| {if i.pointer.any_down() == false {
+                                            //     clear_drag_state = true;
+                                            // }});
+                                            true
+                                        },
+                                        _ => false
+                                    };
+
+                                    let resize_hovered = resize_response.hovered();
+                                    if resize_hovered || dragging {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hover, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
                                 }
 
                                 if matches!(item, GridItem::Row) {
@@ -546,23 +565,36 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let resize_response =
                                         ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
 
-                                    if resize_response.dragged() {
-                                        let drag_delta = resize_response.drag_delta();
-                                        let new_outer_row_height = outer_row_height + drag_delta.y;
-                                        let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
-                                        let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
-                                        state.row_heights[mapped_row_index] = new_row_height;
+                                    if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, item, initial_size: outer_row_height });
                                     }
 
-                                    let dragging_something_else =
-                                        ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
-                                    let resize_hover = resize_response.hovered() && !dragging_something_else;
+                                    if resize_response.drag_stopped() {
+                                        clear_drag_state = true;
+                                    }
 
-                                    if resize_hover || resize_response.dragged() {
+                                    let dragging = match temp_state.drag_state {
+                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_row_index && drag_item == item => {
+                                            // dragging this row
+                                            let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
+                                            let new_outer_row_height = initial_size + drag_delta.y;
+                                            let new_inner_row_height = new_outer_row_height - outer_inner_difference.y;
+                                            let new_row_height = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_row_height);
+
+                                            // TODO change at the end of the frame to avoid cells being the old size.
+                                            state.row_heights[mapped_row_index] = new_row_height;
+
+                                            true
+                                        }
+                                        _ => false
+                                    };
+
+                                    let resize_hovered = resize_response.hovered();
+                                    if resize_hovered || dragging {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hover, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
                                 }
 
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
@@ -809,16 +841,20 @@ impl<DataSource> DeferredTable<DataSource> {
             });
         });
 
+        if clear_drag_state {
+            temp_state.drag_state = None;
+        }
+
         DeferredTablePersistentState::store(ui.ctx(), persistent_state_id, state);
         DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
     }
 
-    fn paint_resize_handle(ui: &mut Ui, resize_line_rect: Rect, resize_response: Response, resize_hover: bool, cell_painter: &Painter) {
+    fn paint_resize_handle(ui: &mut Ui, resize_line_rect: Rect, resize_response: Response, resize_hovered: bool, cell_painter: &Painter) {
         let stroke = if resize_response.dragged() {
             ui.style().visuals.widgets.active.bg_stroke
-        } else if resize_hover {
+        } else if resize_hovered {
             ui.style().visuals.widgets.hovered.bg_stroke
         } else {
             // ui.visuals().widgets.inactive.bg_stroke
@@ -860,7 +896,7 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum GridItem {
     Corner,
     Column,
@@ -971,6 +1007,16 @@ impl DeferredTablePersistentState {
 struct DeferredTableTempState {
     /// holds the index of the top-left cell
     cell_origin: CellIndex,
+
+    drag_state: Option<DragState>
+}
+
+#[derive(Clone, Copy)]
+struct DragState {
+    index: usize,
+    start_pos: Pos2,
+    item: GridItem,
+    initial_size: f32,
 }
 
 impl DeferredTableTempState {
