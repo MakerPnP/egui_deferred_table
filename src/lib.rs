@@ -1,7 +1,8 @@
+use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
     Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect,
-    Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
+    Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
 use log::{info, trace};
@@ -107,6 +108,7 @@ impl<DataSource> DeferredTable<DataSource> {
     {
         let ctx = ui.ctx().clone();
         let style = ui.style();
+        let pixels_per_point = ctx.pixels_per_point();
 
         let mut actions = vec![];
 
@@ -157,13 +159,18 @@ impl<DataSource> DeferredTable<DataSource> {
             outer_next_widget_position
         );
 
+        // CRITICAL - we *must* round to pixels, otherwise we get out-by-one pixel errors when rendering lines
+
         // if there is content above the table, we use this min rect so we to define an area starting at the right place.
         let outer_min_rect =
-            Rect::from_min_size(outer_next_widget_position, self.parameters.min_size.clone());
+            Rect::from_min_size(outer_next_widget_position, self.parameters.min_size.clone())
+                .round_to_pixels(pixels_per_point);
         // FIXME if the parent_max_rect is too small, min_size is not respected, but using
         //       ... `parent_max_rect.size().at_least(self.parameters.min_size)` causes rendering errors
         let outer_max_rect =
-            Rect::from_min_size(outer_next_widget_position, parent_max_rect.size());
+            Rect::from_min_size(outer_next_widget_position, parent_max_rect.size())
+                .round_to_pixels(pixels_per_point);
+
         trace!(
             "outer_min_rect: {:?}, outer_max_rect: {:?}",
             outer_min_rect, outer_max_rect
@@ -181,6 +188,8 @@ impl<DataSource> DeferredTable<DataSource> {
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
 
             let inner_max_rect = ui.max_rect();
+            // FUTURE since these are the same, we can clean-up one or the other...
+            debug_assert_eq!(inner_max_rect, outer_max_rect);
 
             let previous_cell_origin = temp_state.cell_origin;
             trace!("previous_cell_origin: {:?}", previous_cell_origin);
@@ -524,8 +533,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Column) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
-                                    let p1 = Pos2::new(cell_rect.right() + 1.0, cell_rect.top());
-                                    let p2 = Pos2::new(cell_rect.right() + 1.0, cell_rect.bottom());
+                                    let p1 = Pos2::new(cell_rect.right(), cell_rect.top());
+                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
                                     let resize_line_rect = egui::Rect::from_min_max(p1, p2);
 
                                     // let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
@@ -874,7 +883,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
-                            .vline(table_max_rect.min.x + outer_cell_size.x + 1.0, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
+                            .vline(table_max_rect.min.x + outer_cell_size.x, table_max_rect.min.y..=table_max_rect.min.y + table_height, line_stroke);
                     });
             });
         });
