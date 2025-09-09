@@ -40,6 +40,9 @@ Other table systems force you to convert every value for every cell even if the 
 It's possible to use enums for the data source value, see the `growing` example which has a two-state enum `Loading` and `Ready(T)`
 this allows UI's that can show the table at the right size and position while the data is loaded in the background.
 
+For row/column re-ordering, you can handle it by re-ordering the columns for presentation, or you can move/change the
+underlying data.  Compare the 'spreadsheet' and 'sparse' demo's handling of row/column drag/drop actions.
+
 ### Actions
 
 When a user interacts with the table, a `vec` of `Action` is returned so that your code can handle them appropriately.
@@ -62,7 +65,7 @@ of table data.
 | Column Hiding/Row Filtering | ✅ Working via API   |
 | Column re-ordering          | ✅ Working           |
 | Row re-ordering             | ✅ Working           |
-| Column/Row re-size handles  | 🚧 Not-started      |
+| Column/Row re-size handles  | ✅ Working           |
 | Sorting UI                  | 🚧 Not-started (*1) |
 | Filtering UI                | 🚧 Not-started (*2) |
 
@@ -71,12 +74,14 @@ of table data.
 
 ## Demos
 
-See demos folder.   
+See demos folder.
 
 Demos include examples of data sources using spreadsheets, background-loaded, sparse data sources, `vec!` data sources.
 
 Demos include simple and complex UIs, check out the 'docking' example which combines many of the other examples into a single demo
 which uses `egui_dock` tabs and windows for each demo.
+
+The 'spreadsheet' demo, is a working spreadsheet, with formulas and cell re-calculation.
 
 ## License
 
@@ -109,17 +114,22 @@ First release
 - [added] Support row/column filtering.
 - [added] Support row/column re-ordering.
 
+### 0.1.2 (2025/09/09)
+
+- [added] Support row/column resizing.
+- [changed] Improved pixel rendering.
+
 First release
 
 # Comparisons
 
-| Crate                                                                              | Table Grid Renderer     | Notes                                            | Auto-size | Selection       | Hiding Columns | Sorting    | Filtering Rows | Resizable rows   | Resizable columns    | Variable amount of columns/rows | Reordering Columns | Reordering rows | Performance with 1,000's of rows | API notes                    |
-|------------------------------------------------------------------------------------|-------------------------|--------------------------------------------------|-----------|-----------------|----------------|------------|----------------|------------------|----------------------|---------------------------------|--------------------|-----------------|----------------------------------|------------------------------|
-| [`egui_deferred_table`](https://github.com/makerpnp/egui_deferred_table)           | Own                     | Work-in-progress                                 | No        | 🚧 Planned (*8) | ✅ Yes          | 🚧 Planned | ✅ Yes          | 🚧 (In-progress) | 🚧 Yes (In-progress) | ✅ Yes                           | ✅ Yes              | ✅ Yes           |                                  | ✅ excellent                  | Very flexible                   |
-| [`egui_table`](https://github.com/rerun-io/egui_table)                             | Own                     | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No            | ❌ No           | ❌ No       | ❌ No           | ❌ No             | ✅ Yes                | ✅ Yes                           | ❌ No               | ❌ No            | ✅ excellent                      | Flexible                     |
-| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) | Own                     |                                                  | ✅ (*1)    | ❌ No            | ❌ No           | ❌ No       | ❌ No           | ❌ No             | ✅ Yes                | ❗ Yes (*2)                      | ❌ No               | ❌ No            | ✅ good                           | Rigid, unforgiving           |
-| [`egui-selectable-table`](https://crates.io/crates/egui-selectable-table)          | egui_extras::Table (*7) |                                                  | ✅ (*1)    | ✅ Yes           | ❌ No           | ✅ Yes      | ❗ (*3)         | ❌ No             | ✅ Yes                | ❗ Yes (*2)                      | ❌ No               | ❌ No            | ✅ good                           | Rigid, unforgiving           |           
-| [`egui-data-table`](https://crates.io/crates/egui-data-table)                      | egui_extras::Table (*7) | Comprehensive, but limited.                      | ✅ (*1)    | ✅ Yes           | ✅ Yes          | ✅ Yes      | ❗ (*3)         | ❌ No             | ✅ Yes                | ❗ Yes (*4)                      | ✅ Yes              | ❌ No            | ❗ poor (*5)                      | Very rigid, hard-to-use (*6) |
+| Crate                                                                              | Table Grid Renderer     | Notes                                            | Auto-size | Selection       | Hiding Columns | Sorting    | Filtering Rows | Resizable rows | Resizable columns | Variable amount of columns/rows | Reordering Columns | Reordering rows | Performance with 1,000's of rows | API notes                    |
+|------------------------------------------------------------------------------------|-------------------------|--------------------------------------------------|-----------|-----------------|----------------|------------|----------------|----------------|-------------------|---------------------------------|--------------------|-----------------|----------------------------------|------------------------------|
+| [`egui_deferred_table`](https://github.com/makerpnp/egui_deferred_table)           | Own                     | Work-in-progress                                 | No        | 🚧 Planned (*8) | ✅ Yes          | 🚧 Planned | ✅ Yes          | ✅ Yes          | ✅ Yes             | ✅ Yes                           | ✅ Yes              | ✅ Yes           | ✅ excellent                      | Very flexible                |
+| [`egui_table`](https://github.com/rerun-io/egui_table)                             | Own                     | egui_table has a "batteries not included" design | ✅ (*1)    | ❌ No            | ❌ No           | ❌ No       | ❌ No           | ❌ No           | ✅ Yes             | ✅ Yes                           | ❌ No               | ❌ No            | ✅ excellent                      | Flexible                     |
+| [`egui_extras::Table`](https://github.com/emilk/egui/tree/main/crates/egui_extras) | Own                     |                                                  | ✅ (*1)    | ❌ No            | ❌ No           | ❌ No       | ❌ No           | ❌ No           | ✅ Yes             | ❗ Yes (*2)                      | ❌ No               | ❌ No            | ✅ good                           | Rigid, unforgiving           |
+| [`egui-selectable-table`](https://crates.io/crates/egui-selectable-table)          | egui_extras::Table (*7) |                                                  | ✅ (*1)    | ✅ Yes           | ❌ No           | ✅ Yes      | ❗ (*3)         | ❌ No           | ✅ Yes             | ❗ Yes (*2)                      | ❌ No               | ❌ No            | ✅ good                           | Rigid, unforgiving           |           
+| [`egui-data-table`](https://crates.io/crates/egui-data-table)                      | egui_extras::Table (*7) | Comprehensive, but limited.                      | ✅ (*1)    | ✅ Yes           | ✅ Yes          | ✅ Yes      | ❗ (*3)         | ❌ No           | ✅ Yes             | ❗ Yes (*4)                      | ✅ Yes              | ❌ No            | ❗ poor (*5)                      | Very rigid, hard-to-use (*6) |
 
 1) Works only when every cell has been rendered - no-up front checking of every cell's width height.  e.g. on the first 
    frame, the rendered cells are used to calculate the column widths, but when the user scrolls down to a wider row the column width
