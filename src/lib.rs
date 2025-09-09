@@ -2,7 +2,7 @@ use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
     Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect,
-    Response, Sense, Stroke, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
+    Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
 use log::{info, trace};
@@ -406,7 +406,9 @@ impl<DataSource> DeferredTable<DataSource> {
                             let visible_row_index = cell_origin.row + (grid_row_index.saturating_sub(1));
                             let mapped_row_index = Self::map_index(dimensions.row_count, row_ordering, visible_row_index);
 
-                            if grid_row_index > 0 {
+                            let row_kind = Self::build_row_kind(grid_row_index);
+
+                            if matches!(row_kind, RowKind::ValuesRow) {
                                 if let Some(rows_to_filter) = &rows_to_filter {
                                     if rows_to_filter.contains(&(mapped_row_index)) {
                                         trace!("filtered row");
@@ -416,13 +418,11 @@ impl<DataSource> DeferredTable<DataSource> {
                             }
                             row_counter += 1;
 
-
                             let row_bg_color = striped_row_color(row_counter, &ui.style()).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
-                            let inner_row_height = if grid_row_index > 0 {
-                                *state.row_heights.get(mapped_row_index).unwrap_or(&inner_cell_size.y)
-                            } else {
-                                inner_cell_size.y
+                            let inner_row_height = match row_kind {
+                                RowKind::ValuesRow => *state.row_heights.get(mapped_row_index).unwrap_or(&inner_cell_size.y),
+                                RowKind::HeaderRow => inner_cell_size.y,
                             };
                             let outer_row_height = inner_row_height + outer_inner_difference.y;
 
@@ -433,17 +433,18 @@ impl<DataSource> DeferredTable<DataSource> {
                                     break
                                 }
 
-                                let item = Self::build_grid_item(grid_row_index, grid_column_index);
+                                let cell_kind = Self::build_cell_kind(grid_row_index, grid_column_index);
 
-                                if matches!(item, GridItem::Cell) {
-                                    // no cell rendering
+                                if matches!(cell_kind, CellKind::Value) {
+                                    // no cell rendering during header rendering
+                                    // we're just rendering the top and left headers
                                     break
                                 }
 
                                 let visible_column_index = cell_origin.column + (grid_column_index.saturating_sub(1));
                                 let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
 
-                                if matches!(item, GridItem::Column) {
+                                if matches!(cell_kind, CellKind::ColumnHeader) {
                                     if let Some(columns_to_filter) = &columns_to_filter {
                                         if columns_to_filter.contains(&mapped_column_index) {
                                             trace!("filtered column");
@@ -452,13 +453,15 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
                                 }
 
-                                let start_pos = if matches!(item, GridItem::Column | GridItem::Row) {
-                                    rect.min
-                                } else {
-                                    table_max_rect.min
+                                let start_pos = match cell_kind {
+                                    // for smooth scrolling, we position the cell using rect.min, then later we clip the left/top of the partial cell
+                                    CellKind::ColumnHeader | CellKind::RowHeader => rect.min,
+                                    // for the corner we fix the cell use the top/left
+                                    CellKind::Corner => table_max_rect.min,
+                                    _ => unreachable!()
                                 };
 
-                                let inner_column_width = if matches!(item, GridItem::Column) {
+                                let inner_column_width = if matches!(cell_kind, CellKind::ColumnHeader) {
                                     *state.column_widths.get(mapped_column_index).unwrap_or(&inner_cell_size.x)
                                 } else {
                                     inner_cell_size.x
@@ -469,10 +472,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let mut x = start_pos.x + accumulated_column_widths;
                                 accumulated_column_widths += outer_column_width + 1.0;
 
-                                if grid_row_index == 0 {
+                                if matches!(cell_kind, CellKind::Corner | CellKind::ColumnHeader) {
                                     y = table_max_rect.min.y;
                                 }
-                                if grid_column_index == 0 {
+                                if matches!(cell_kind, CellKind::Corner | CellKind::RowHeader) {
                                     x = table_max_rect.min.x;
                                 }
 
@@ -530,7 +533,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let mut drag_tooltip_message = None;
 
-                                if matches!(item, GridItem::Column) {
+                                if matches!(cell_kind, CellKind::ColumnHeader) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
                                     let resize_line_points = [cell_rect.right_top(), cell_rect.right_bottom()];
@@ -545,7 +548,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
 
                                     if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
-                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_column_index, start_pos, item, initial_size: outer_column_width });
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
                                     }
 
                                     if resize_response.drag_stopped() {
@@ -553,7 +556,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
 
                                     let dragging = match temp_state.drag_state {
-                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_column_index && drag_item == item => {
+                                        Some(DragState { index, start_pos, cell_kind: drag_cell_kind, initial_size }) if index == mapped_column_index && drag_cell_kind == cell_kind => {
                                             // dragging this column
                                             let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
                                             let new_outer_column_width = initial_size + drag_delta.x;
@@ -567,7 +570,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                             drag_tooltip_message = Some(format!("{}", new_column_width));
 
                                             true
-                                        },
+                                        }
                                         _ => false
                                     };
 
@@ -579,7 +582,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     Self::paint_resize_handle(ui, resize_line_points, resize_response, resize_hovered, &resize_painter);
                                 }
 
-                                if matches!(item, GridItem::Row) {
+                                if matches!(cell_kind, CellKind::RowHeader) {
                                     let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
 
                                     let resize_line_points = [cell_rect.left_bottom(), cell_rect.right_bottom()];
@@ -590,7 +593,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
 
                                     if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
-                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, item, initial_size: outer_row_height });
+                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, cell_kind: cell_kind, initial_size: outer_row_height });
                                     }
 
                                     if resize_response.drag_stopped() {
@@ -598,7 +601,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
 
                                     let dragging = match temp_state.drag_state {
-                                        Some(DragState { index, start_pos, item: drag_item, initial_size }) if index == mapped_row_index && drag_item == item => {
+                                        Some(DragState { index, start_pos, cell_kind: drag_cell_kind, initial_size }) if index == mapped_row_index && drag_cell_kind == cell_kind => {
                                             // dragging this row
                                             let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
                                             let new_outer_row_height = initial_size + drag_delta.y;
@@ -637,16 +640,16 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
                                 struct DndPayload {
-                                    item: GridItem,
+                                    cell_kind: CellKind,
                                     index: usize,
                                 }
 
-                                let payload = match item {
-                                    GridItem::Column => {
-                                        Some(DndPayload { item, index: mapped_column_index })
+                                let payload = match cell_kind {
+                                    CellKind::ColumnHeader => {
+                                        Some(DndPayload { cell_kind, index: mapped_column_index })
                                     }
-                                    GridItem::Row => {
-                                        Some(DndPayload { item, index: mapped_row_index })
+                                    CellKind::RowHeader => {
+                                        Some(DndPayload { cell_kind, index: mapped_row_index })
                                     }
                                     _ => None
                                 };
@@ -660,11 +663,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let style = cell_ui.style_mut();
                                 style.wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                                let label = match item {
-                                    GridItem::Corner => {
+                                let label = match cell_kind {
+                                    CellKind::Corner => {
                                         format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row)
                                     }
-                                    GridItem::Column => {
+                                    CellKind::ColumnHeader => {
                                         if let Some(column) = builder.table.columns.get(&mapped_column_index) {
                                             column.name.clone()
                                         } else if self.parameters.zero_based_headers {
@@ -674,7 +677,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                             mapped_column_number.to_string()
                                         }
                                     }
-                                    GridItem::Row => {
+                                    CellKind::RowHeader => {
                                         if self.parameters.zero_based_headers {
                                             mapped_row_index.to_string()
                                         } else {
@@ -682,7 +685,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                             mapped_row_number.to_string()
                                         }
                                     },
-                                    GridItem::Cell => {
+                                    CellKind::Value => {
                                         // already filtered out
                                         unreachable!()
                                     }
@@ -692,7 +695,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                     egui::Label::new(&label).selectable(false),
                                 );
 
-                                if !matches!(item, GridItem::Corner) {
+                                if !matches!(cell_kind, CellKind::Corner) {
                                     if response.dragged() {
                                         Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
                                             .gap(12.0)
@@ -714,13 +717,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     // handle dnd release
                                     if let Some(payload) = response.dnd_release_payload::<DndPayload>() {
-                                        match (payload.item, item) {
+                                        match (payload.cell_kind, cell_kind) {
                                             // currently only dragging like onto like is supported.
-                                            (GridItem::Column, GridItem::Column) => if payload.index != mapped_column_index {
+                                            (CellKind::ColumnHeader, CellKind::ColumnHeader) => if payload.index != mapped_column_index {
                                                 info!("dnd release: column {} -> column {}", payload.index, mapped_column_index);
                                                 actions.push(Action::ColumnReorder{ from: payload.index, to: mapped_column_index })
                                             }
-                                            (GridItem::Row, GridItem::Row) => if payload.index != mapped_row_index {
+                                            (CellKind::RowHeader, CellKind::RowHeader) => if payload.index != mapped_row_index {
                                                 info!("dnd release: row {} -> row {}", payload.index, mapped_row_index);
                                                 actions.push(Action::RowReorder{ from: payload.index, to: mapped_row_index })
                                             }
@@ -925,15 +928,23 @@ impl<DataSource> DeferredTable<DataSource> {
         cell_painter.line_segment(points, stroke);
     }
 
-    fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
+    fn build_cell_kind(grid_row_index: usize, grid_column_index: usize) -> CellKind {
         if grid_row_index == 0 && grid_column_index == 0 {
-            GridItem::Corner
+            CellKind::Corner
         } else if grid_row_index == 0 {
-            GridItem::Column
+            CellKind::ColumnHeader
         } else if grid_column_index == 0 {
-            GridItem::Row
+            CellKind::RowHeader
         } else {
-            GridItem::Cell
+            CellKind::Value
+        }
+    }
+
+    fn build_row_kind(grid_row_index: usize) -> RowKind {
+        if grid_row_index == 0 {
+            RowKind::HeaderRow
+        } else {
+            RowKind::ValuesRow
         }
     }
 
@@ -958,11 +969,17 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum GridItem {
+enum CellKind {
     Corner,
-    Column,
-    Row,
-    Cell,
+    ColumnHeader,
+    RowHeader,
+    Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum RowKind {
+    HeaderRow,
+    ValuesRow,
 }
 
 #[derive(Clone, Debug)]
@@ -1076,7 +1093,7 @@ struct DeferredTableTempState {
 struct DragState {
     index: usize,
     start_pos: Pos2,
-    item: GridItem,
+    cell_kind: CellKind,
     initial_size: f32,
 }
 
