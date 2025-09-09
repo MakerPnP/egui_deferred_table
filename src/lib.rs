@@ -704,7 +704,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                         Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
                                             .gap(12.0)
                                             .show(|ui|{
-                                                ui.label(label);
+                                                ui.horizontal(|ui|{
+                                                    ui.label(label);
+                                                });
                                             });
                                     }
 
