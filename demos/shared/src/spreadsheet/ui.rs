@@ -1,8 +1,6 @@
 use crate::spreadsheet::SpreadsheetSource;
 use egui::{Response, Ui};
-use egui_deferred_table::{
-    Action, CellIndex, DeferredTable, DeferredTableBuilder, TableDimensions,
-};
+use egui_deferred_table::{Action, CellIndex, DeferredTable, TableDimensions};
 use log::debug;
 
 pub struct SpreadsheetState {
@@ -38,23 +36,19 @@ impl Default for SpreadsheetState {
 pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<Action>) {
     let data_source = &mut state.data_source;
 
-    DeferredTable::new(ui.make_persistent_id("table_1")).show(
-        ui,
-        &mut *data_source,
-        |builder: &mut DeferredTableBuilder<SpreadsheetSource>| {
-            builder.header(|header_builder| {
-                let TableDimensions {
-                    row_count: _,
-                    column_count,
-                } = header_builder.current_dimensions();
+    DeferredTable::new(ui.make_persistent_id("table_1")).show(ui, &mut *data_source, |builder| {
+        builder.header(|header_builder| {
+            let TableDimensions {
+                row_count: _,
+                column_count,
+            } = header_builder.current_dimensions();
 
-                for index in 0..column_count {
-                    let column_name = SpreadsheetSource::make_column_name(index);
-                    header_builder.column(index, column_name);
-                }
-            })
-        },
-    )
+            for index in 0..column_count {
+                let column_name = SpreadsheetSource::make_column_name(index);
+                header_builder.column(index, column_name);
+            }
+        })
+    })
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {

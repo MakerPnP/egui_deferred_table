@@ -216,17 +216,13 @@ fn contents_inside_scroll_area(
 
         let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
             .min_size((400.0, 400.0).into())
-            .show(
-                ui,
-                &mut data_source,
-                |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
-                    builder.header(|header_builder| {
-                        for (index, field) in futurama::fields().iter().enumerate() {
-                            header_builder.column(index, field.to_string());
-                        }
-                    })
-                },
-            );
+            .show(ui, &mut data_source, |builder| {
+                builder.header(|header_builder| {
+                    for (index, field) in futurama::fields().iter().enumerate() {
+                        header_builder.column(index, field.to_string());
+                    }
+                })
+            });
 
         for action in actions {
             match action {
@@ -299,7 +295,7 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1")).show(
         ui,
         &mut data_source,
-        |builder: &mut DeferredTableBuilder<'_, &[LogEntry]>| {
+        |builder| {
             builder.header(|header_builder| {
                 for (index, (name, width)) in
                     [("Time", 200.0), ("Level", 100.0), ("Message", 400.0)]

@@ -1,6 +1,6 @@
 use crate::sparse::{CellKind, CellKindChoice, SparseMapSource, generate_data};
 use egui::{Response, Ui};
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder, apply_reordering};
+use egui_deferred_table::{Action, DeferredTable, apply_reordering};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
@@ -74,15 +74,11 @@ pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<A
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
-        .show(
-            ui,
-            data_source,
-            |builder: &mut DeferredTableBuilder<'_, SparseMapSource<CellKind>>| {
-                builder.header(|_header_builder| {
-                    // no need to define every column unless there's something specific
-                })
-            },
-        )
+        .show(ui, data_source, |builder| {
+            builder.header(|_header_builder| {
+                // no need to define every column unless there's something specific
+            })
+        })
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
