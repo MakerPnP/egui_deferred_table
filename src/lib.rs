@@ -533,13 +533,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 if matches!(item, GridItem::Column) {
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
-                                    let p1 = Pos2::new(cell_rect.right(), cell_rect.top());
-                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
-                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
-
-                                    // let resize_line_rect = egui::Rect::from_min_max(cell_rect.right_top(), cell_rect.right_bottom());
-
-                                    let resize_interact_rect = resize_line_rect
+                                    let resize_line_points = [cell_rect.right_top(), cell_rect.right_bottom()];
+                                    let resize_interact_rect = Rect::from(resize_line_points)
                                         .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
 
                                     if false {
@@ -581,17 +576,15 @@ impl<DataSource> DeferredTable<DataSource> {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, resize_response, resize_hovered, &resize_painter);
                                 }
 
                                 if matches!(item, GridItem::Row) {
                                     let row_resize_id = ui.id().with("resize_row").with(grid_row_index);
 
-                                    let p1 = Pos2::new(cell_rect.left(), cell_rect.bottom());
-                                    let p2 = Pos2::new(cell_rect.right(), cell_rect.bottom());
-                                    let resize_line_rect = egui::Rect::from_min_max(p1, p2);
-                                    let resize_interact_rect = resize_line_rect
-                                        .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
+                                    let resize_line_points = [cell_rect.left_bottom(), cell_rect.right_bottom()];
+                                    let resize_interact_rect = Rect::from(resize_line_points)
+                                        .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
 
                                     let resize_response =
                                         ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
@@ -628,7 +621,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_rect, resize_response, resize_hovered, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, resize_response, resize_hovered, &resize_painter);
                                 }
 
                                 if let Some(message) = drag_tooltip_message {
@@ -918,7 +911,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
     fn paint_resize_handle(
         ui: &mut Ui,
-        resize_line_rect: Rect,
+        points: [Pos2; 2],
         resize_response: Response,
         resize_hovered: bool,
         cell_painter: &Painter,
@@ -932,13 +925,7 @@ impl<DataSource> DeferredTable<DataSource> {
             ui.visuals().widgets.noninteractive.bg_stroke
         };
 
-        cell_painter.rect_stroke(
-            resize_line_rect,
-            CornerRadius::ZERO,
-            stroke,
-            StrokeKind::Middle,
-        );
-        //cell_painter.line_segment([resize_line_rect.min, resize_line_rect.max], stroke);
+        cell_painter.line_segment(points, stroke);
     }
 
     fn build_grid_item(grid_row_index: usize, grid_column_index: usize) -> GridItem {
