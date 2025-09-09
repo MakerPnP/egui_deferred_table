@@ -665,24 +665,24 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                 let label = match cell_kind {
                                     CellKind::Corner => {
-                                        format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row)
+                                        Some(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row))
                                     }
                                     CellKind::ColumnHeader => {
                                         if let Some(column) = builder.table.columns.get(&mapped_column_index) {
                                             column.name.clone()
                                         } else if self.parameters.zero_based_headers {
-                                            mapped_column_index.to_string()
+                                            Some(mapped_column_index.to_string())
                                         } else {
                                             let mapped_column_number = mapped_column_index + 1;
-                                            mapped_column_number.to_string()
+                                            Some(mapped_column_number.to_string())
                                         }
                                     }
                                     CellKind::RowHeader => {
                                         if self.parameters.zero_based_headers {
-                                            mapped_row_index.to_string()
+                                            Some(mapped_row_index.to_string())
                                         } else {
                                             let mapped_row_number = mapped_row_index + 1;
-                                            mapped_row_number.to_string()
+                                            Some(mapped_row_number.to_string())
                                         }
                                     },
                                     CellKind::Value => {
@@ -691,19 +691,23 @@ impl<DataSource> DeferredTable<DataSource> {
                                     }
                                 };
 
-                                cell_ui.add(
-                                    egui::Label::new(&label).selectable(false),
-                                );
+                                if let Some(label) = &label {
+                                    cell_ui.add(
+                                        egui::Label::new(label).selectable(false),
+                                    );
+                                }
 
                                 if !matches!(cell_kind, CellKind::Corner) {
-                                    if response.dragged() {
-                                        Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
-                                            .gap(12.0)
-                                            .show(|ui|{
-                                                ui.horizontal(|ui|{
-                                                    ui.label(label);
+                                    if let Some(label) = label {
+                                        if response.dragged() {
+                                            Tooltip::always_open(ctx.clone(), ui_layer_id, "_egui_deferred_table_dnd_".into(), PopupAnchor::Pointer)
+                                                .gap(12.0)
+                                                .show(|ui| {
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(label);
+                                                    });
                                                 });
-                                            });
+                                        }
                                     }
 
                                     // Highlight drop target
@@ -1230,26 +1234,28 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
     }
 
     pub fn column(&mut self, index: usize, name: String) -> &mut ColumnParameters {
-        let parameters = ColumnParameters::new(name);
-        self.table.columns.insert(index, parameters);
+        self.ensure_column_parameters(index);
 
-        &mut self.table.columns[index]
+        let parameters = &mut self.table.columns[index];
+        parameters.name = Some(name);
+
+        parameters
+    }
+
+    fn ensure_column_parameters(&mut self, index: usize) {
+        while self.table.columns.len() <= index {
+            self.table.columns.insert(index, ColumnParameters::default());
+        }
     }
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct ColumnParameters {
-    name: String,
+    name: Option<String>,
     default_width: Option<f32>,
 }
 
 impl ColumnParameters {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            default_width: None,
-        }
-    }
-
     pub fn default_width(&mut self, default_width: f32) -> &mut Self {
         self.default_width = Some(default_width);
         self
