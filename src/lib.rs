@@ -868,9 +868,6 @@ impl<DataSource> DeferredTable<DataSource> {
                             }
                         });
 
-                        table_width -= 1.0;
-                        table_height -= 1.0;
-
                         let line_stroke = ui.style().visuals.window_stroke;
                         ui.painter()
                             .with_clip_rect(inner_max_rect)
