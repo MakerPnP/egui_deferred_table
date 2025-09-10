@@ -1,8 +1,8 @@
 use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, Context, CornerRadius, Id, Painter, PointerButton, PopupAnchor, Pos2, Rangef, Rect,
-    Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
+    Color32, Context, CornerRadius, Id, NumExt, Painter, PointerButton, PopupAnchor, Pos2, Rangef,
+    Rect, Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use indexmap::IndexMap;
 use log::{info, trace};
@@ -207,8 +207,13 @@ impl<DataSource> DeferredTable<DataSource> {
 
                 // apply default widths
                 builder.table.columns.iter().for_each(|(index, column)| {
-                    if let Some(width) = column.default_width {
-                        state.column_widths[*index] = width;
+                    if let Some(default_width) = column.default_width {
+                        let sanitized_width = if column.resizable {
+                            column.width_range.clamp(default_width)
+                        } else {
+                            default_width
+                        };
+                        state.column_widths[*index] = sanitized_width;
                     }
                 })
             }
@@ -534,6 +539,8 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let mut drag_tooltip_message = None;
 
                                 if matches!(cell_kind, CellKind::ColumnHeader) {
+                                    let column_parameters = &builder.table.columns[mapped_column_index];
+
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
                                     let resize_line_points = [cell_rect.right_top(), cell_rect.right_bottom()];
@@ -547,39 +554,49 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let resize_response =
                                         ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
 
-                                    if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
-                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
-                                    }
-
-                                    if resize_response.drag_stopped() {
-                                        clear_drag_state = true;
-                                    }
-
-                                    let dragging = match temp_state.drag_state {
-                                        Some(DragState { index, start_pos, cell_kind: drag_cell_kind, initial_size }) if index == mapped_column_index && drag_cell_kind == cell_kind => {
-                                            // dragging this column
-                                            let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
-                                            let new_outer_column_width = initial_size + drag_delta.x;
-                                            let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
-                                            let new_column_width = Rangef::new(minimum_resize_size, f32::INFINITY).clamp(new_inner_column_width);
-
-                                            if new_column_width != inner_column_width {
-                                                // change at the end of the frame to avoid cells being the old size.
-                                                drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
-                                            }
-                                            drag_tooltip_message = Some(format!("{}", new_column_width));
-
-                                            true
+                                    let mut drag_handle_state = if resize_response.hovered() {
+                                        if !column_parameters.resizable {
+                                            DragHandleState::Disabled
+                                        } else {
+                                            DragHandleState::Hovered
                                         }
-                                        _ => false
+                                    } else {
+                                        DragHandleState::Inactive
                                     };
 
-                                    let resize_hovered = resize_response.hovered();
-                                    if resize_hovered || dragging {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                                    if column_parameters.resizable {
+                                        if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
+                                            temp_state.drag_state = pointer_pos.map(|start_pos| DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
+                                        }
+
+                                        if resize_response.drag_stopped() {
+                                            clear_drag_state = true;
+                                        }
+
+                                        match temp_state.drag_state {
+                                            Some(DragState { index, start_pos, cell_kind: drag_cell_kind, initial_size }) if index == mapped_column_index && drag_cell_kind == cell_kind => {
+                                                // dragging this column
+                                                let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
+                                                let new_outer_column_width = initial_size + drag_delta.x;
+                                                let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
+
+                                                let sanitized_column_width = column_parameters.width_range.clamp(new_inner_column_width);
+
+                                                let new_column_width = sanitized_column_width.at_least(minimum_resize_size);
+
+                                                if new_column_width != inner_column_width {
+                                                    // change at the end of the frame to avoid cells being the old size.
+                                                    drag_action = Some(DragAction::SetWidth(mapped_column_index, new_column_width));
+                                                }
+                                                drag_tooltip_message = Some(format!("{}", new_column_width));
+
+                                                drag_handle_state = DragHandleState::Dragged;
+                                            }
+                                            _ => {}
+                                        };
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_points, resize_response, resize_hovered, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter);
                                 }
 
                                 if matches!(cell_kind, CellKind::RowHeader) {
@@ -592,6 +609,12 @@ impl<DataSource> DeferredTable<DataSource> {
                                     let resize_response =
                                         ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
 
+                                    let mut drag_handle_state = if resize_response.hovered() {
+                                        DragHandleState::Hovered
+                                    } else {
+                                        DragHandleState::Inactive
+                                    };
+
                                     if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
                                         temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, cell_kind: cell_kind, initial_size: outer_row_height });
                                     }
@@ -600,7 +623,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         clear_drag_state = true;
                                     }
 
-                                    let dragging = match temp_state.drag_state {
+                                    match temp_state.drag_state {
                                         Some(DragState { index, start_pos, cell_kind: drag_cell_kind, initial_size }) if index == mapped_row_index && drag_cell_kind == cell_kind => {
                                             // dragging this row
                                             let drag_delta = pointer_pos.map_or(Vec2::ZERO, |current_pos| current_pos - start_pos);
@@ -614,17 +637,12 @@ impl<DataSource> DeferredTable<DataSource> {
                                             }
                                             drag_tooltip_message = Some(format!("{}", new_row_height));
 
-                                            true
+                                            drag_handle_state = DragHandleState::Dragged;
                                         }
-                                        _ => false
-                                    };
-
-                                    let resize_hovered = resize_response.hovered();
-                                    if resize_hovered || dragging {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
+                                        _ => { }
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_points, resize_response, resize_hovered, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter);
                                 }
 
                                 if let Some(message) = drag_tooltip_message {
@@ -916,20 +934,27 @@ impl<DataSource> DeferredTable<DataSource> {
     fn paint_resize_handle(
         ui: &mut Ui,
         points: [Pos2; 2],
-        resize_response: Response,
-        resize_hovered: bool,
+        state: DragHandleState,
         cell_painter: &Painter,
     ) {
-        let stroke = if resize_response.dragged() {
-            ui.style().visuals.widgets.active.bg_stroke
-        } else if resize_hovered {
-            ui.style().visuals.widgets.hovered.bg_stroke
-        } else {
-            // ui.visuals().widgets.inactive.bg_stroke
-            ui.visuals().widgets.noninteractive.bg_stroke
+        let stroke = match state {
+            DragHandleState::Disabled => ui.visuals().widgets.noninteractive.bg_stroke,
+            DragHandleState::Inactive => ui.visuals().widgets.open.bg_stroke,
+            DragHandleState::Hovered => ui.style().visuals.widgets.hovered.bg_stroke,
+            DragHandleState::Dragged => ui.style().visuals.widgets.active.bg_stroke,
         };
 
         cell_painter.line_segment(points, stroke);
+
+        match state {
+            DragHandleState::Disabled => {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+            }
+            DragHandleState::Inactive => {}
+            DragHandleState::Dragged | DragHandleState::Hovered => {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+            }
+        }
     }
 
     fn build_cell_kind(grid_row_index: usize, grid_column_index: usize) -> CellKind {
@@ -970,6 +995,14 @@ fn striped_row_color(row: usize, style: &Style) -> Option<Color32> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DragHandleState {
+    Disabled,
+    Inactive,
+    Hovered,
+    Dragged,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1244,20 +1277,69 @@ impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
 
     fn ensure_column_parameters(&mut self, index: usize) {
         while self.table.columns.len() <= index {
-            self.table.columns.insert(index, ColumnParameters::default());
+            self.table
+                .columns
+                .insert(index, ColumnParameters::default());
         }
     }
 }
 
-#[derive(Debug, Default, Clone)]
+/// Specifies the column parameters.
+///
+/// Since min/max/default width can all conflict or be specified in different orders they must be sanitized before use
+/// in the following order: default -> clamp(min, max)
+///
+/// debug_asserts are raised if any values are < 0
+/// in release builds default/min/max have a minimum of 0 at runtime.
+#[derive(Debug, Clone)]
 pub struct ColumnParameters {
     name: Option<String>,
     default_width: Option<f32>,
+
+    width_range: Rangef,
+
+    resizable: bool,
+}
+
+impl Default for ColumnParameters {
+    fn default() -> Self {
+        Self {
+            name: None,
+            default_width: None,
+            width_range: Rangef::new(10.0, f32::INFINITY),
+            resizable: true,
+        }
+    }
 }
 
 impl ColumnParameters {
-    pub fn default_width(&mut self, default_width: f32) -> &mut Self {
-        self.default_width = Some(default_width);
+    pub fn default_width(&mut self, value: f32) -> &mut Self {
+        debug_assert!(value >= 0.0);
+        self.default_width = Some(value.at_least(0.0));
+        self
+    }
+
+    /// default: 10.0
+    ///
+    /// if the column is resizable, then the minimum width might be larger the value specified here, or the default,
+    /// due to the space required for resize handles and resize handle interaction constraints
+    pub fn minimum_width(&mut self, value: f32) -> &mut Self {
+        debug_assert!(value >= 0.0);
+        self.width_range.min = value.at_least(0.0);
+        self
+    }
+
+    /// a value f32::INFINITY allows the column to be resized to be as large as possible
+    ///
+    /// default: f32::INFINITY
+    pub fn maximum_width(&mut self, value: f32) -> &mut Self {
+        debug_assert!(value >= 0.0);
+        self.width_range.max = value.at_least(0.0);
+        self
+    }
+
+    pub fn resizable(&mut self, value: bool) -> &mut Self {
+        self.resizable = value;
         self
     }
 }

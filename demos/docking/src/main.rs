@@ -250,8 +250,63 @@ pub struct InsideScrollAreaState {
 }
 
 fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut SimpleTableState) {
-    const FIELD_WIDTHS: [f32; 8] = [100.0, 80.0, 100.0, 400.0, 125.0, 100.0, 100.0, 80.0];
+    struct Params {
+        default_width: f32,
+        maximum_width: f32,
+        minimum_width: f32,
+        resizable: bool,
+    }
 
+    const FIELD_PARAMS: [Params; 8] = [
+        Params {
+            default_width: 100.0,
+            maximum_width: 400.0,
+            minimum_width: 50.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 80.0,
+            maximum_width: 0.0,
+            minimum_width: 0.0,
+            resizable: false,
+        },
+        Params {
+            default_width: 100.0,
+            maximum_width: 400.0,
+            minimum_width: 50.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 400.0,
+            maximum_width: f32::INFINITY,
+            minimum_width: 50.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 125.0,
+            maximum_width: 400.0,
+            minimum_width: 50.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 100.0,
+            maximum_width: 200.0,
+            minimum_width: 25.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 100.0,
+            maximum_width: 200.0,
+            minimum_width: 25.0,
+            resizable: true,
+        },
+        Params {
+            default_width: 80.0,
+            maximum_width: 200.0,
+            minimum_width: 25.0,
+            resizable: true,
+        },
+    ];
     let mut data_source = context.data.as_slice();
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1")).show(
@@ -259,12 +314,15 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
         &mut data_source,
         |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
             builder.header(|header_builder| {
-                for (index, (field, width)) in
-                    futurama::fields().iter().zip(FIELD_WIDTHS).enumerate()
+                for (index, (field, params)) in
+                    futurama::fields().iter().zip(FIELD_PARAMS).enumerate()
                 {
                     header_builder
                         .column(index, field.to_string())
-                        .default_width(width);
+                        .resizable(params.resizable)
+                        .default_width(params.default_width)
+                        .minimum_width(params.minimum_width)
+                        .maximum_width(params.maximum_width);
                 }
             })
         },
