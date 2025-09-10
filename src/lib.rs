@@ -141,6 +141,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
         let mut clear_drag_state = false;
 
+        let default_column_parameters = ColumnParameters::default();
+
         enum DragAction {
             SetWidth(usize, f32),
             SetHeight(usize, f32),
@@ -551,7 +553,9 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let mut drag_tooltip_message = None;
 
                                 if matches!(cell_kind, CellKind::ColumnHeader) {
-                                    let column_parameters = &builder.table.columns[mapped_column_index];
+                                    let column_parameters = builder.table.columns.get(&mapped_column_index).unwrap_or_else(|| {
+                                        &default_column_parameters
+                                    });
 
                                     let column_resize_id = ui.id().with("resize_column").with(mapped_column_index);
 
