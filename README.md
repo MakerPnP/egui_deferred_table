@@ -105,23 +105,30 @@ Possible log types:
 - `[fixed]` for any bug fixes.
 - `[security]` to invite users to upgrade in case of vulnerabilities.
 
-### 0.1.0 (2025/09/01)
+### 0.1.4 (2025/09/10)
 
-First release
+- [fixed] Fix panic when column constraints are not specified for a column.
+- [changed] Hovered cell is not highlighted by default. New API methods are available to enable it.
 
-### 0.1.1 (2025/09/05)
+### 0.1.3 (2025/09/10)
 
-- [added] Support row/column filtering.
-- [added] Support row/column re-ordering.
+- [added] Column constraints (min/max/resizable).
 
 ### 0.1.2 (2025/09/09)
 
 - [added] Support row/column resizing.
 - [changed] Improved pixel rendering.
 
-### 0.1.3 (2025/09/10)
+### 0.1.1 (2025/09/05)
 
-- [added] Column constraints (min/max/resizable).
+- [added] Support row/column filtering.
+- [added] Support row/column re-ordering.
+
+### 0.1.0 (2025/09/01)
+
+First release
+
+
 
 First release
 
