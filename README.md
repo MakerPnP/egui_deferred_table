@@ -119,6 +119,10 @@ First release
 - [added] Support row/column resizing.
 - [changed] Improved pixel rendering.
 
+### 0.1.3 (2025/09/10)
+
+- [added] Column constraints (min/max/resizable).
+
 First release
 
 # Comparisons

@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "egui_deferred_table"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "egui",
  "indexmap",
