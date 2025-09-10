@@ -596,7 +596,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         };
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter, cell_kind);
                                 }
 
                                 if matches!(cell_kind, CellKind::RowHeader) {
@@ -604,7 +604,7 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     let resize_line_points = [cell_rect.left_bottom(), cell_rect.right_bottom()];
                                     let resize_interact_rect = Rect::from(resize_line_points)
-                                        .expand2(Vec2::new(ui.style().interaction.resize_grab_radius_side, 0.0));
+                                        .expand2(Vec2::new(0.0, ui.style().interaction.resize_grab_radius_side));
 
                                     let resize_response =
                                         ui.interact(resize_interact_rect, row_resize_id, egui::Sense::click_and_drag());
@@ -642,7 +642,7 @@ impl<DataSource> DeferredTable<DataSource> {
                                         _ => { }
                                     }
 
-                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter);
+                                    Self::paint_resize_handle(ui, resize_line_points, drag_handle_state, &resize_painter, cell_kind);
                                 }
 
                                 if let Some(message) = drag_tooltip_message {
@@ -936,6 +936,7 @@ impl<DataSource> DeferredTable<DataSource> {
         points: [Pos2; 2],
         state: DragHandleState,
         cell_painter: &Painter,
+        cell_kind: CellKind,
     ) {
         let stroke = match state {
             DragHandleState::Disabled => ui.visuals().widgets.noninteractive.bg_stroke,
@@ -951,9 +952,15 @@ impl<DataSource> DeferredTable<DataSource> {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
             }
             DragHandleState::Inactive => {}
-            DragHandleState::Dragged | DragHandleState::Hovered => {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
-            }
+            DragHandleState::Dragged | DragHandleState::Hovered => match cell_kind {
+                CellKind::ColumnHeader => {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                }
+                CellKind::RowHeader => {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeRow);
+                }
+                _ => unreachable!(),
+            },
         }
     }
 
