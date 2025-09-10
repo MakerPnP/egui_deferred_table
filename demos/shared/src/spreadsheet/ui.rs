@@ -36,7 +36,9 @@ impl Default for SpreadsheetState {
 pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<Action>) {
     let data_source = &mut state.data_source;
 
-    DeferredTable::new(ui.make_persistent_id("table_1")).show(ui, &mut *data_source, |builder| {
+    DeferredTable::new(ui.make_persistent_id("table_1"))
+        .highlight_hovered_cell()
+        .show(ui, &mut *data_source, |builder| {
         builder.header(|header_builder| {
             let TableDimensions {
                 row_count: _,

@@ -22,6 +22,7 @@ pub struct DeferredTable<DataSource> {
 struct DeferredTableParameters {
     default_cell_size: Option<Vec2>,
     zero_based_headers: bool,
+    highlight_hovered_cell: bool,
     min_size: Vec2,
 }
 
@@ -30,6 +31,7 @@ impl Default for DeferredTableParameters {
         Self {
             default_cell_size: None,
             zero_based_headers: false,
+            highlight_hovered_cell: false,
             // TODO use a constant for this
             min_size: Vec2::new(400.0, 200.0),
         }
@@ -45,21 +47,31 @@ impl<DataSource> DeferredTable<DataSource> {
         }
     }
 
+    /// this currently also controls the row/column header and corner sizes
     pub fn default_cell_size(mut self, size: Vec2) -> Self {
         self.parameters.default_cell_size = Some(size);
         self
     }
 
+    /// default: disabled
     pub fn zero_based_headers(mut self) -> Self {
         self.parameters.zero_based_headers = true;
         self
     }
 
+    /// default: enabled
     pub fn one_based_headers(mut self) -> Self {
         self.parameters.zero_based_headers = false;
         self
     }
 
+    /// default: disabled
+    pub fn highlight_hovered_cell(mut self) -> Self {
+        self.parameters.highlight_hovered_cell = true;
+        self
+    }
+
+    /// default: 400x200
     pub fn min_size(mut self, size: Vec2) -> Self {
         self.parameters.min_size = size;
         self
@@ -857,8 +869,8 @@ impl<DataSource> DeferredTable<DataSource> {
 
                                     let response = ui.allocate_rect(cell_clip_rect, Sense::click());
 
-                                    let bg_color = if response.contains_pointer() {
-                                        ui.style().visuals.widgets.hovered.bg_fill
+                                    let bg_color = if self.parameters.highlight_hovered_cell && response.contains_pointer() {
+                                        ui.style().visuals.widgets.hovered.weak_bg_fill
                                     } else {
                                         row_bg_color
                                     };
