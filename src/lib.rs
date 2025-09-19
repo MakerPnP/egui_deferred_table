@@ -2,7 +2,7 @@ use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
     Color32, Context, CornerRadius, Id, NumExt, Painter, PointerButton, PopupAnchor, Pos2, Rangef,
-    Rect, Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
+    Rect, Response, RichText, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use log::{info, trace};
 use std::fmt::Display;
@@ -24,6 +24,7 @@ struct DeferredTableParameters<'a> {
     highlight_hovered_cell: bool,
     min_size: Vec2,
     column_parameters: Option<&'a Vec<AxisParameters>>,
+    row_parameters: Option<&'a Vec<AxisParameters>>,
 }
 
 impl<'a> Default for DeferredTableParameters<'a> {
@@ -35,6 +36,7 @@ impl<'a> Default for DeferredTableParameters<'a> {
             // TODO use a constant for this
             min_size: Vec2::new(400.0, 200.0),
             column_parameters: None,
+            row_parameters: None,
         }
     }
 }
@@ -80,6 +82,11 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
     pub fn column_parameters(mut self, column_parameters: &'a Vec<AxisParameters>) -> Self {
         self.parameters.column_parameters = Some(column_parameters);
+        self
+    }
+
+    pub fn row_parameters(mut self, row_parameters: &'a Vec<AxisParameters>) -> Self {
+        self.parameters.row_parameters = Some(row_parameters);
         self
     }
 
@@ -141,7 +148,9 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
         let mut clear_drag_state = false;
 
+        // TODO allow these to be overridden
         let default_column_parameters = AxisParameters::default();
+        let default_row_parameters = AxisParameters::default();
 
         enum DragAction {
             SetWidth(usize, f32),
@@ -232,6 +241,20 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                 // Note: We do not truncate the row heights, so that if a data source has `n` rows, then later `< n` rows
                 //       then later again `>= n` rows, the previously used rows heights still apply.
                 state.row_heights.resize(dimensions.row_count, inner_cell_size.y);
+
+                // apply default heights
+                if let Some(row_parameters) = self.parameters.row_parameters {
+                    row_parameters.iter().enumerate().for_each(|(index, row)| {
+                        if let Some(default_height) = row.default_dimension {
+                            let sanitized_width = if row.resizable {
+                                row.dimension_range.clamp(default_height)
+                            } else {
+                                default_height
+                            };
+                            state.row_heights[index] = sanitized_width;
+                        }
+                    });
+                }
             }
 
             // XXX - remove this temporary hard-coded value
@@ -695,17 +718,21 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 let style = cell_ui.style_mut();
                                 style.wrap_mode = Some(egui::TextWrapMode::Extend);
 
+                                let mut monospace = false;
                                 let label = match cell_kind {
                                     CellKind::Corner => {
                                         Some(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row))
                                     }
                                     CellKind::ColumnHeader => {
-                                        if let Some(column) = self.parameters
+                                        monospace = default_column_parameters.monospace;
+
+                                        if let Some(column_parameters) = self.parameters
                                             .column_parameters
                                             .map(|it| it.get(mapped_column_index))
                                             .flatten()
                                         {
-                                            column.name.clone()
+                                            monospace = column_parameters.monospace;
+                                            column_parameters.name.clone()
                                         } else if self.parameters.zero_based_headers {
                                             Some(mapped_column_index.to_string())
                                         } else {
@@ -714,7 +741,15 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         }
                                     }
                                     CellKind::RowHeader => {
-                                        if self.parameters.zero_based_headers {
+                                        monospace = default_row_parameters.monospace;
+                                        if let Some(row_parameters) = self.parameters
+                                            .row_parameters
+                                            .map(|it| it.get(mapped_row_index))
+                                            .flatten()
+                                        {
+                                            monospace = row_parameters.monospace;
+                                            row_parameters.name.clone()
+                                        } else if self.parameters.zero_based_headers {
                                             Some(mapped_row_index.to_string())
                                         } else {
                                             let mapped_row_number = mapped_row_index + 1;
@@ -728,9 +763,14 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 };
 
                                 if let Some(label) = &label {
-                                    cell_ui.add(
-                                        egui::Label::new(label).selectable(false),
-                                    );
+                                    cell_ui.add({
+                                        let mut text = RichText::new(label);
+
+                                        if monospace {
+                                            text = text.monospace();
+                                        }
+                                        egui::Label::new(text).selectable(false)
+                                    });
                                 }
 
                                 if !matches!(cell_kind, CellKind::Corner) {
@@ -1225,9 +1265,12 @@ pub trait DeferredTableRenderer {
 #[derive(Debug, Clone)]
 pub struct AxisParameters {
     name: Option<String>,
+    /// The row/column height/width, respectively
     default_dimension: Option<f32>,
+    /// The row/column height/width range, respectively
     dimension_range: Rangef,
     resizable: bool,
+    monospace: bool,
 }
 
 impl Default for AxisParameters {
@@ -1237,6 +1280,7 @@ impl Default for AxisParameters {
             default_dimension: None,
             dimension_range: Rangef::new(10.0, f32::INFINITY),
             resizable: true,
+            monospace: false,
         }
     }
 }
@@ -1247,7 +1291,8 @@ impl AxisParameters {
         self
     }
 
-    pub fn default_width(mut self, value: f32) -> Self {
+    /// The row/column height/width, respectively
+    pub fn default_dimension(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
         self.default_dimension = Some(value.at_least(0.0));
         self
@@ -1274,6 +1319,11 @@ impl AxisParameters {
 
     pub fn resizable(mut self, value: bool) -> Self {
         self.resizable = value;
+        self
+    }
+
+    pub fn monospace(mut self, value: bool) -> Self {
+        self.monospace = value;
         self
     }
 }

@@ -11,6 +11,7 @@ pub struct SpreadsheetState {
     automatic_recalculation: bool,
 
     column_parameters: Option<Vec<AxisParameters>>,
+    row_parameters: Option<Vec<AxisParameters>>,
 }
 
 impl SpreadsheetState {
@@ -29,27 +30,52 @@ impl SpreadsheetState {
     pub fn build_and_show_table(&mut self, ui: &mut Ui) -> (Response, Vec<Action>) {
         let dimensions = self.data_source.get_dimensions();
 
-        let rebuild = match &self.column_parameters {
+        let rebuild_column_parameters = match &self.column_parameters {
             None => true,
             Some(column_parameters) => column_parameters.len() != dimensions.column_count,
         };
 
-        if rebuild {
+        if rebuild_column_parameters {
             let column_parameters = (0..dimensions.column_count)
                 .map(|index| {
                     let column_name = SpreadsheetSource::make_column_name(index);
-                    AxisParameters::default().name(column_name)
+                    AxisParameters::default().monospace(true).name(column_name)
                 })
                 .collect();
             self.column_parameters = Some(column_parameters);
         }
 
+        let rebuild_row_parameters = match &self.row_parameters {
+            None => true,
+            Some(row_parameters) => row_parameters.len() != dimensions.row_count,
+        };
+
+        if rebuild_row_parameters {
+            // This is an example of an expensive operation (ilog10) which you do NOT want to repeat for every single
+            // row and where you only want to re-run this block when the number of rows changes.
+
+            let digits_required = match dimensions.row_count {
+                0 => 1, // Handle empty tables (though unlikely to be called)
+                n => n.ilog10() as usize + 1,
+            };
+
+            let row_parameters = (0..dimensions.row_count)
+                .map(|index| {
+                    let row_name = SpreadsheetSource::make_row_name(index, digits_required);
+                    AxisParameters::default().monospace(true).name(row_name)
+                })
+                .collect();
+            self.row_parameters = Some(row_parameters);
+        }
+
         let column_params = self.column_parameters.as_ref().unwrap();
+        let row_params = self.row_parameters.as_ref().unwrap();
 
         DeferredTable::new(ui.make_persistent_id("table_1"))
             // in this example, the spreadsheet maintains the column parameters so we don't need
             // to build them every frame
             .column_parameters(column_params)
+            .row_parameters(row_params)
             .highlight_hovered_cell()
             .show(ui, &mut self.data_source)
     }
@@ -62,6 +88,7 @@ impl Default for SpreadsheetState {
             value: None,
             automatic_recalculation: false,
             column_parameters: None,
+            row_parameters: None,
         }
     }
 }

@@ -315,7 +315,7 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
             AxisParameters::default()
                 .name(field_name.to_string())
                 .resizable(field_params.resizable)
-                .default_width(field_params.default_width)
+                .default_dimension(field_params.default_width)
                 .minimum_dimension(field_params.minimum_width)
                 .maximum_dimension(field_params.maximum_width)
         })
@@ -350,13 +350,13 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
     let column_params = vec![
         AxisParameters::default()
             .name("Time".to_string())
-            .default_width(200.0),
+            .default_dimension(200.0),
         AxisParameters::default()
             .name("Level".to_string())
-            .default_width(100.0),
+            .default_dimension(100.0),
         AxisParameters::default()
             .name("Message".to_string())
-            .default_width(400.0),
+            .default_dimension(400.0),
     ];
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))

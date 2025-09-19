@@ -109,6 +109,7 @@ Possible log types:
 
 - [changed] Remove the `DeferredTableBuilder` in favor of a solution that allows caching of the column parameters on an 
   as-required basis so they do not have to be built every frame.
+- [added] Support for row parameters in addition to column parameters.
 
 ### 0.1.4 (2025/09/10)
 
