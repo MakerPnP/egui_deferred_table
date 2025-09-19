@@ -2,7 +2,8 @@ use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
     Color32, Context, CornerRadius, Id, NumExt, Painter, PointerButton, PopupAnchor, Pos2, Rangef,
-    Rect, Response, RichText, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
+    Rect, Response, RichText, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, UiKind,
+    UiStackInfo, Vec2,
 };
 use log::{info, trace};
 use std::marker::PhantomData;
@@ -279,6 +280,14 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             // state.row_heights[12] = 100.0;
 
             let scroll_style = ui.spacing().scroll;
+
+            #[derive(Debug, Copy, Clone, Hash)]
+            enum CellId {
+                Corner,
+                MappedColumn(usize),
+                MappedRow(usize),
+                Cell(CellIndex),
+            }
 
             //
             // container for the table and the scroll bars.
@@ -701,26 +710,20 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                                 let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
 
-                                struct DndPayload {
-                                    cell_kind: CellKind,
-                                    index: usize,
-                                }
-
-                                let payload = match cell_kind {
-                                    CellKind::ColumnHeader => {
-                                        Some(DndPayload { cell_kind, index: mapped_column_index })
-                                    }
-                                    CellKind::RowHeader => {
-                                        Some(DndPayload { cell_kind, index: mapped_row_index })
-                                    }
-                                    _ => None
+                                let cell_id = match cell_kind {
+                                    CellKind::Corner => CellId::Corner,
+                                    CellKind::ColumnHeader => CellId::MappedColumn(mapped_column_index),
+                                    CellKind::RowHeader => CellId::MappedRow(mapped_row_index),
+                                    CellKind::Value => unreachable!(),
                                 };
 
-                                if let Some(payload) = payload {
-                                    response.dnd_set_drag_payload(payload);
+                                if matches!(cell_kind, CellKind::ColumnHeader | CellKind::RowHeader) {
+                                    response.dnd_set_drag_payload(cell_id);
                                 }
 
-                                let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_inner_rect));
+                                let mut cell_ui = ui.new_child(UiBuilder::new()
+                                    .id_salt(cell_id)
+                                    .max_rect(cell_inner_rect));
                                 cell_ui.set_clip_rect(cell_inner_clip_rect);
                                 let style = cell_ui.style_mut();
                                 style.wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -770,6 +773,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 };
 
                                 if let Some(label) = &label {
+                                    //cell_ui.label(format!("{:?}", cell_ui.id()));
                                     cell_ui.add({
                                         let mut text = RichText::new(label);
 
@@ -794,7 +798,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     }
 
                                     // Highlight drop target
-                                    if response.dnd_hover_payload::<DndPayload>().is_some() {
+                                    if response.dnd_hover_payload::<CellId>().is_some() {
                                         ui.painter().rect_filled(
                                             cell_clip_rect,
                                             CornerRadius::ZERO,
@@ -803,16 +807,16 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     }
 
                                     // handle dnd release
-                                    if let Some(payload) = response.dnd_release_payload::<DndPayload>() {
-                                        match (payload.cell_kind, cell_kind) {
+                                    if let Some(payload) = response.dnd_release_payload::<CellId>() {
+                                        match (*payload, cell_id) {
                                             // currently only dragging like onto like is supported.
-                                            (CellKind::ColumnHeader, CellKind::ColumnHeader) => if payload.index != mapped_column_index {
-                                                info!("dnd release: column {} -> column {}", payload.index, mapped_column_index);
-                                                actions.push(Action::ColumnReorder{ from: payload.index, to: mapped_column_index })
+                                            (CellId::MappedColumn(payload_index), CellId::MappedColumn(current_index)) => if payload_index != current_index {
+                                                info!("dnd release: column {} -> column {}", payload_index, current_index);
+                                                actions.push(Action::ColumnReorder{ from: payload_index, to: mapped_column_index })
                                             }
-                                            (CellKind::RowHeader, CellKind::RowHeader) => if payload.index != mapped_row_index {
-                                                info!("dnd release: row {} -> row {}", payload.index, mapped_row_index);
-                                                actions.push(Action::RowReorder{ from: payload.index, to: mapped_row_index })
+                                            (CellId::MappedRow(payload_index), CellId::MappedRow(current_index)) => if payload_index != current_index {
+                                                info!("dnd release: row {} -> row {}", payload_index, current_index);
+                                                actions.push(Action::RowReorder{ from: payload_index, to: current_index })
                                             }
                                             _ => ()
                                         }
@@ -838,7 +842,6 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                         ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
                             ui.set_clip_rect(translated_viewport_rect);
-                            // ui.skip_ahead_auto_ids(???); // TODO Make sure we get consistent IDs.
 
                             let table_max_rect = ui.max_rect();
 
@@ -948,10 +951,16 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                             .rect_stroke(cell_rect, CornerRadius::ZERO, ui.style().visuals.widgets.noninteractive.bg_stroke, StrokeKind::Inside);
                                     }
 
-                                    let mut cell_ui = ui.new_child(UiBuilder::new().max_rect(cell_inner_rect));
+                                    let cell_id = CellId::Cell(cell_index);
+
+                                    let mut cell_ui = ui.new_child(UiBuilder::new()
+                                        .id_salt(cell_id)
+                                        .ui_stack_info(UiStackInfo::new(UiKind::TableCell))
+                                        .max_rect(cell_inner_rect));
                                     cell_ui.set_clip_rect(cell_inner_clip_rect);
                                     cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
+                                    //cell_ui.label(format!("{:?}", cell_ui.id()));
                                     renderer.render_cell(&mut cell_ui, cell_index, data_source);
                                 }
                                 accumulated_row_heights += outer_row_height + 1.0;
@@ -1169,7 +1178,6 @@ impl From<(usize, usize)> for TableDimensions {
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 struct DeferredTablePersistentState {
     // FUTURE We *could* add row/column ordering/filtering here too
-
     column_widths: Vec<f32>,
     row_heights: Vec<f32>,
 }

@@ -114,6 +114,7 @@ For API migration details, see the git commit history and study the changes made
 - [added] Support for row parameters in addition to column parameters.
 - [changed] Move some methods from the `DeferredTableDataSource` to `DeferredTableRender`.  This allows multiple projections
   (aka 'views') of the same data source using different renderers.  See the new 'projections' example.
+- [changed] each cell has a consistent ID based on the cell kind and any applicable mapped row/column index.
 
 ### 0.1.4 (2025/09/10)
 
