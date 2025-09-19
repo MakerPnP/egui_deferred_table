@@ -2,7 +2,7 @@ extern crate core;
 
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
-use egui_deferred_table::{Action, ColumnParameters, DeferredTable};
+use egui_deferred_table::{Action, AxisParameters, DeferredTable};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
 use shared::data::futurama;
@@ -215,7 +215,7 @@ fn contents_inside_scroll_area(
         let mut data_source = context.data.as_slice();
         let column_params = futurama::fields()
             .iter()
-            .map(|field| ColumnParameters::default().name(field.to_string()))
+            .map(|field| AxisParameters::default().name(field.to_string()))
             .collect::<Vec<_>>();
 
         let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
@@ -312,12 +312,12 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
         .iter()
         .zip(FIELD_PARAMS)
         .map(|(field_name, field_params)| {
-            ColumnParameters::default()
+            AxisParameters::default()
                 .name(field_name.to_string())
                 .resizable(field_params.resizable)
                 .default_width(field_params.default_width)
-                .minimum_width(field_params.minimum_width)
-                .maximum_width(field_params.maximum_width)
+                .minimum_dimension(field_params.minimum_width)
+                .maximum_dimension(field_params.maximum_width)
         })
         .collect::<Vec<_>>();
 
@@ -348,13 +348,13 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
     let mut data_source = context.log_entries.as_slice();
 
     let column_params = vec![
-        ColumnParameters::default()
+        AxisParameters::default()
             .name("Time".to_string())
             .default_width(200.0),
-        ColumnParameters::default()
+        AxisParameters::default()
             .name("Level".to_string())
             .default_width(100.0),
-        ColumnParameters::default()
+        AxisParameters::default()
             .name("Message".to_string())
             .default_width(400.0),
     ];

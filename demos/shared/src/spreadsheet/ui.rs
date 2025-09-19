@@ -1,7 +1,7 @@
 use crate::spreadsheet::SpreadsheetSource;
 use egui::{Response, Ui};
 use egui_deferred_table::{
-    Action, CellIndex, ColumnParameters, DeferredTable, DeferredTableDataSource,
+    Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource,
 };
 use log::debug;
 
@@ -10,7 +10,7 @@ pub struct SpreadsheetState {
     value: Option<(CellIndex, String)>,
     automatic_recalculation: bool,
 
-    column_parameters: Option<Vec<ColumnParameters>>,
+    column_parameters: Option<Vec<AxisParameters>>,
 }
 
 impl SpreadsheetState {
@@ -38,7 +38,7 @@ impl SpreadsheetState {
             let column_parameters = (0..dimensions.column_count)
                 .map(|index| {
                     let column_name = SpreadsheetSource::make_column_name(index);
-                    ColumnParameters::default().name(column_name)
+                    AxisParameters::default().name(column_name)
                 })
                 .collect();
             self.column_parameters = Some(column_parameters);

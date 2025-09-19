@@ -23,7 +23,7 @@ struct DeferredTableParameters<'a> {
     zero_based_headers: bool,
     highlight_hovered_cell: bool,
     min_size: Vec2,
-    column_parameters: Option<&'a Vec<ColumnParameters>>,
+    column_parameters: Option<&'a Vec<AxisParameters>>,
 }
 
 impl<'a> Default for DeferredTableParameters<'a> {
@@ -78,7 +78,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         self
     }
 
-    pub fn column_parameters(mut self, column_parameters: &'a Vec<ColumnParameters>) -> Self {
+    pub fn column_parameters(mut self, column_parameters: &'a Vec<AxisParameters>) -> Self {
         self.parameters.column_parameters = Some(column_parameters);
         self
     }
@@ -141,7 +141,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
         let mut clear_drag_state = false;
 
-        let default_column_parameters = ColumnParameters::default();
+        let default_column_parameters = AxisParameters::default();
 
         enum DragAction {
             SetWidth(usize, f32),
@@ -215,9 +215,9 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                 // apply default widths
                 if let Some(column_parameters) = self.parameters.column_parameters {
                     column_parameters.iter().enumerate().for_each(|(index, column)| {
-                        if let Some(default_width) = column.default_width {
+                        if let Some(default_width) = column.default_dimension {
                             let sanitized_width = if column.resizable {
-                                column.width_range.clamp(default_width)
+                                column.dimension_range.clamp(default_width)
                             } else {
                                 default_width
                             };
@@ -594,7 +594,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                                 let new_outer_column_width = initial_size + drag_delta.x;
                                                 let new_inner_column_width = new_outer_column_width - outer_inner_difference.x;
 
-                                                let sanitized_column_width = column_parameters.width_range.clamp(new_inner_column_width);
+                                                let sanitized_column_width = column_parameters.dimension_range.clamp(new_inner_column_width);
 
                                                 let new_column_width = sanitized_column_width.at_least(minimum_resize_size);
 
@@ -1215,35 +1215,33 @@ pub trait DeferredTableRenderer {
     fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex);
 }
 
-/// Specifies the column parameters.
+/// Specifies the axis (row/column) parameters.
 ///
-/// Since min/max/default width can all conflict or be specified in different orders they must be sanitized before use
+/// Since min/max/default dimension can all conflict or be specified in a different order they must be sanitized before use
 /// in the following order: default -> clamp(min, max)
 ///
 /// debug_asserts are raised if any values are < 0
 /// in release builds default/min/max have a minimum of 0 at runtime.
 #[derive(Debug, Clone)]
-pub struct ColumnParameters {
+pub struct AxisParameters {
     name: Option<String>,
-    default_width: Option<f32>,
-
-    width_range: Rangef,
-
+    default_dimension: Option<f32>,
+    dimension_range: Rangef,
     resizable: bool,
 }
 
-impl Default for ColumnParameters {
+impl Default for AxisParameters {
     fn default() -> Self {
         Self {
             name: None,
-            default_width: None,
-            width_range: Rangef::new(10.0, f32::INFINITY),
+            default_dimension: None,
+            dimension_range: Rangef::new(10.0, f32::INFINITY),
             resizable: true,
         }
     }
 }
 
-impl ColumnParameters {
+impl AxisParameters {
     pub fn name(mut self, s: impl Into<String>) -> Self {
         self.name = Some(s.into());
         self
@@ -1251,26 +1249,26 @@ impl ColumnParameters {
 
     pub fn default_width(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
-        self.default_width = Some(value.at_least(0.0));
+        self.default_dimension = Some(value.at_least(0.0));
         self
     }
 
     /// default: 10.0
     ///
-    /// if the column is resizable, then the minimum width might be larger the value specified here, or the default,
+    /// if the row/column is resizable, then the minimum dimension might be larger the value specified here, or the default,
     /// due to the space required for resize handles and resize handle interaction constraints
-    pub fn minimum_width(mut self, value: f32) -> Self {
+    pub fn minimum_dimension(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
-        self.width_range.min = value.at_least(0.0);
+        self.dimension_range.min = value.at_least(0.0);
         self
     }
 
-    /// a value f32::INFINITY allows the column to be resized to be as large as possible
+    /// a value f32::INFINITY allows the row/column to be resized to be as large as possible
     ///
     /// default: f32::INFINITY
-    pub fn maximum_width(mut self, value: f32) -> Self {
+    pub fn maximum_dimension(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
-        self.width_range.max = value.at_least(0.0);
+        self.dimension_range.max = value.at_least(0.0);
         self
     }
 
