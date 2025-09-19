@@ -30,6 +30,8 @@ jobs:
       run: cd demos/shared && cargo test --verbose
     - name: Run demo tests (docking)
       run: cd demos/docking && cargo test --verbose
+    - name: Run demo tests (projections)
+      run: cd demos/projections && cargo test --verbose
     - name: Run demo tests (sparse)
       run: cd demos/sparse && cargo test --verbose
     - name: Run demo tests (spreadsheet)

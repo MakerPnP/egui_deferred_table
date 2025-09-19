@@ -7,7 +7,7 @@ use log::{debug, trace};
 
 pub mod ui;
 
-enum CellState<T> {
+pub enum CellState<T> {
     Loading,
     Ready(T),
 }
@@ -18,11 +18,11 @@ impl<T> Default for CellState<T> {
     }
 }
 
-enum CellValue {
+pub enum CellValue {
     String(String), //...
 }
 
-struct GrowingSource<T> {
+pub struct GrowingSource<T> {
     last_accessed_at: DateTime<Local>,
     pending_operations: Vec<(DateTime<Local>, Operations)>,
     data: Vec<Vec<T>>,
@@ -162,7 +162,7 @@ impl DeferredTableDataSource for GrowingSource<CellState<CellValue>> {
 }
 
 #[derive(Default)]
-struct GrowingSourceRenderer {}
+pub struct GrowingSourceRenderer {}
 
 impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>> for GrowingSourceRenderer {
     fn render_cell(
@@ -182,6 +182,35 @@ impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>> for GrowingSourc
             CellState::Ready(value) => match value {
                 CellValue::String(s) => {
                     ui.label(s);
+                }
+            },
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct GrowingSourceAlternativeRenderer {}
+
+impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>>
+    for GrowingSourceAlternativeRenderer
+{
+    fn render_cell(
+        &self,
+        ui: &mut Ui,
+        cell_index: CellIndex,
+        data_source: &GrowingSource<CellState<CellValue>>,
+    ) {
+        let Some(cell_state) = data_source.get_cell_value(cell_index) else {
+            return;
+        };
+
+        match cell_state {
+            CellState::Loading => {
+                ui.label("loading...");
+            }
+            CellState::Ready(value) => match value {
+                CellValue::String(s) => {
+                    ui.monospace(s);
                 }
             },
         }

@@ -105,11 +105,15 @@ Possible log types:
 - `[fixed]` for any bug fixes.
 - `[security]` to invite users to upgrade in case of vulnerabilities.
 
+For API migration details, see the git commit history and study the changes made to the demos.
+
 ### (unreleased)
 
 - [changed] Remove the `DeferredTableBuilder` in favor of a solution that allows caching of the column parameters on an 
   as-required basis so they do not have to be built every frame.
 - [added] Support for row parameters in addition to column parameters.
+- [changed] Move some methods from the `DeferredTableDataSource` to `DeferredTableRender`.  This allows multiple projections
+  (aka 'views') of the same data source using different renderers.  See the new 'projections' example.
 
 ### 0.1.4 (2025/09/10)
 
