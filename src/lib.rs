@@ -1168,10 +1168,8 @@ impl From<(usize, usize)> for TableDimensions {
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 struct DeferredTablePersistentState {
-    // TODO column ordering
-    // TODO column visibility
-    // TODO cursor/focus position
-    // TODO cell selection (multi-select)
+    // FUTURE We *could* add row/column ordering/filtering here too
+
     column_widths: Vec<f32>,
     row_heights: Vec<f32>,
 }
