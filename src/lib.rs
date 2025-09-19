@@ -5,7 +5,6 @@ use egui::{
     Rect, Response, RichText, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
 use log::{info, trace};
-use std::fmt::Display;
 use std::marker::PhantomData;
 use std::ops::Range;
 
@@ -90,9 +89,15 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         self
     }
 
-    pub fn show(&self, ui: &mut Ui, data_source: &mut DataSource) -> (Response, Vec<Action>)
+    pub fn show<Renderer>(
+        &self,
+        ui: &mut Ui,
+        data_source: &mut DataSource,
+        renderer: &mut Renderer,
+    ) -> (Response, Vec<Action>)
     where
-        DataSource: DeferredTableDataSource + DeferredTableRenderer,
+        DataSource: DeferredTableDataSource,
+        Renderer: DeferredTableRenderer<DataSource>,
     {
         data_source.prepare();
         // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
@@ -101,7 +106,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let dimensions = data_source.get_dimensions();
 
         let result = if !dimensions.is_empty() {
-            self.show_inner(ui, data_source, dimensions)
+            self.show_inner(ui, data_source, renderer, dimensions)
         } else {
             (ui.response(), vec![])
         };
@@ -116,14 +121,16 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
     }
 
     /// Safety: only call if the dimensions are non-empty
-    fn show_inner(
+    fn show_inner<Renderer>(
         &self,
         ui: &mut Ui,
         data_source: &mut DataSource,
+        renderer: &mut Renderer,
         dimensions: TableDimensions,
     ) -> (Response, Vec<Action>)
     where
-        DataSource: DeferredTableDataSource + DeferredTableRenderer,
+        DataSource: DeferredTableDataSource,
+        Renderer: DeferredTableRenderer<DataSource>,
     {
         let ctx = ui.ctx().clone();
         let style = ui.style();
@@ -277,8 +284,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             // container for the table and the scroll bars.
             //
 
-            let column_ordering = data_source.column_ordering().unwrap_or_default();
-            let row_ordering = data_source.row_ordering().unwrap_or_default();
+            let column_ordering = renderer.column_ordering().unwrap_or_default();
+            let row_ordering = renderer.row_ordering().unwrap_or_default();
 
             let outer_inner_difference = outer_cell_size - inner_cell_size;
             // pre-calculate to avoid doing the divide for every cell.
@@ -288,7 +295,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             let total_content_width = state.column_widths.iter().sum::<f32>() + ((outer_inner_difference.x + 1.0) * dimensions.column_count as f32) + outer_cell_size.x;
             let total_content_height = state.row_heights.iter().sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
 
-            let columns_to_filter = data_source.columns_to_filter();
+            let columns_to_filter = renderer.columns_to_filter();
             let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
                 columns.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
@@ -296,7 +303,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                 }).sum::<f32>()
             });
 
-            let rows_to_filter = data_source.rows_to_filter();
+            let rows_to_filter = renderer.rows_to_filter();
             let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
                 rows.iter().map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
@@ -945,7 +952,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     cell_ui.set_clip_rect(cell_inner_clip_rect);
                                     cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                                    data_source.render_cell(&mut cell_ui, cell_index);
+                                    renderer.render_cell(&mut cell_ui, cell_index, data_source);
                                 }
                                 accumulated_row_heights += outer_row_height + 1.0;
                             }
@@ -1219,6 +1226,10 @@ pub trait DeferredTableDataSource {
     fn finalize(&mut self) {}
 
     fn get_dimensions(&self) -> TableDimensions;
+}
+
+pub trait DeferredTableRenderer<DataSource> {
+    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, source: &DataSource);
 
     /// return a list of rows indexes to filter/exclude.
     fn rows_to_filter(&self) -> Option<&[usize]> {
@@ -1249,10 +1260,6 @@ pub trait DeferredTableDataSource {
     fn column_ordering(&self) -> Option<&[usize]> {
         None
     }
-}
-
-pub trait DeferredTableRenderer {
-    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex);
 }
 
 /// Specifies the axis (row/column) parameters.
@@ -1328,6 +1335,15 @@ impl AxisParameters {
     }
 }
 
+/// Helper for rendering tables based on tuple slices
+///
+/// Implementations of `DeferredTableRender` for tuples with 2 to 16 elements are provided by the
+/// `impl_deferred_table_for_tuple` macro.
+///
+/// See crate examples.
+#[derive(Default)]
+pub struct SimpleTupleRenderer {}
+
 // define a macro that handles the implementation for a specific tuple size
 macro_rules! impl_tuple_for_size {
     // Pattern: tuple type names, tuple size, match arms for indexing
@@ -1341,9 +1357,9 @@ macro_rules! impl_tuple_for_size {
             }
         }
 
-        impl<$($T: Display),*> DeferredTableRenderer for &[($($T),*)] {
-            fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
-                if let Some(row_data) = self.get(cell_index.row) {
+        impl<$($T: std::fmt::Display),*> DeferredTableRenderer<&[($($T),*)]> for SimpleTupleRenderer {
+            fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, source: &&[($($T),*)]) {
+                if let Some(row_data) = source.get(cell_index.row) {
                     match cell_index.column {
                         $( $idx => ui.label(row_data.$field.to_string()), )*
                         _ => panic!("cell_index out of bounds. {:?}", cell_index),

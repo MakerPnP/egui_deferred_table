@@ -1,4 +1,4 @@
-use crate::sparse::{CellKind, CellKindChoice, SparseMapSource, generate_data};
+use crate::sparse::{CellKind, CellKindChoice, SparseMapRenderer, SparseMapSource, generate_data};
 use egui::{Response, Ui};
 use egui_deferred_table::{Action, DeferredTable, apply_reordering};
 use fastrand::Rng;
@@ -7,6 +7,7 @@ use names::Generator;
 
 pub struct SparseTableState {
     data: SparseMapSource<CellKind>,
+    renderer: SparseMapRenderer,
 
     ui_state: UiState,
 
@@ -17,6 +18,7 @@ pub struct SparseTableState {
 impl Default for SparseTableState {
     fn default() -> Self {
         let mut data = SparseMapSource::new();
+        let renderer = SparseMapRenderer::new();
 
         let mut rng = Rng::new();
         let mut name_gen = Generator::with_naming(names::Name::Plain);
@@ -44,6 +46,7 @@ impl Default for SparseTableState {
 
         Self {
             data,
+            renderer,
             ui_state: UiState::default(),
             rng,
             name_gen,
@@ -71,11 +74,12 @@ struct UiState {
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
     let data_source = &mut state.data;
+    let renderer = &mut state.renderer;
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
         .highlight_hovered_cell()
-        .show(ui, data_source)
+        .show(ui, data_source, renderer)
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
@@ -104,18 +108,18 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
                 }
             }
             Action::ColumnReorder { from, to } => {
-                apply_reordering(&mut state.data.column_ordering, from, to);
+                apply_reordering(&mut state.renderer.column_ordering, from, to);
 
                 // Update UI to reflect changes
                 state.ui_state.column_ordering_input =
-                    list_to_string(state.data.column_ordering.as_mut().unwrap());
+                    list_to_string(state.renderer.column_ordering.as_mut().unwrap());
             }
             Action::RowReorder { from, to } => {
-                apply_reordering(&mut state.data.row_ordering, from, to);
+                apply_reordering(&mut state.renderer.row_ordering, from, to);
 
                 // Update UI to reflect changes
                 state.ui_state.row_ordering_input =
-                    list_to_string(state.data.row_ordering.as_mut().unwrap());
+                    list_to_string(state.renderer.row_ordering.as_mut().unwrap());
             }
         }
     }
@@ -240,7 +244,7 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 )
                 .changed()
             {
-                state.data.rows_to_filter =
+                state.renderer.rows_to_filter =
                     Some(range_string_to_list(&state.ui_state.filter_rows_input));
             }
 
@@ -253,7 +257,7 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 )
                 .changed()
             {
-                state.data.columns_to_filter =
+                state.renderer.columns_to_filter =
                     Some(range_string_to_list(&state.ui_state.filter_columns_input));
             }
         });
@@ -271,7 +275,8 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 )
                 .changed()
             {
-                state.data.row_ordering = Some(string_to_list(&state.ui_state.row_ordering_input));
+                state.renderer.row_ordering =
+                    Some(string_to_list(&state.ui_state.row_ordering_input));
             }
 
             ui.label("Column ordering");
@@ -283,7 +288,7 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 )
                 .changed()
             {
-                state.data.column_ordering =
+                state.renderer.column_ordering =
                     Some(string_to_list(&state.ui_state.column_ordering_input));
             }
         });

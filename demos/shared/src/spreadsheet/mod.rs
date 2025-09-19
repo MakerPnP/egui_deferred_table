@@ -132,26 +132,6 @@ impl SpreadsheetSource {
         self.data.push(row);
     }
 
-    pub fn render_pending(&self, ui: &mut Ui) {
-        ui.label("...");
-    }
-
-    pub fn render_error(&self, ui: &mut Ui, message: &String) {
-        ui.colored_label(egui::Color32::RED, message);
-    }
-
-    pub fn render_value(&self, ui: &mut Ui, value: &Value) {
-        match value {
-            Value::Text(text) => {
-                ui.label(text);
-            }
-            Value::Decimal(decimal) => {
-                ui.label(decimal.to_string());
-            }
-            Value::Empty => {}
-        }
-    }
-
     pub fn get_cell_value(&self, cell_index: CellIndex) -> Option<&CellValue> {
         let row_values = &self.data[cell_index.row];
 
@@ -1054,9 +1034,34 @@ impl DeferredTableDataSource for SpreadsheetSource {
     }
 }
 
-impl DeferredTableRenderer for SpreadsheetSource {
-    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
-        let possible_value = self.get_cell_value(cell_index);
+#[derive(Default)]
+struct SpreadsheetRenderer {}
+
+impl SpreadsheetRenderer {
+    pub fn render_pending(&self, ui: &mut Ui) {
+        ui.label("...");
+    }
+
+    pub fn render_error(&self, ui: &mut Ui, message: &String) {
+        ui.colored_label(egui::Color32::RED, message);
+    }
+
+    pub fn render_value(&self, ui: &mut Ui, value: &Value) {
+        match value {
+            Value::Text(text) => {
+                ui.label(text);
+            }
+            Value::Decimal(decimal) => {
+                ui.label(decimal.to_string());
+            }
+            Value::Empty => {}
+        }
+    }
+}
+
+impl DeferredTableRenderer<SpreadsheetSource> for SpreadsheetRenderer {
+    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, data_source: &SpreadsheetSource) {
+        let possible_value = data_source.get_cell_value(cell_index);
         match possible_value {
             None => {}
             Some(value) => match value {

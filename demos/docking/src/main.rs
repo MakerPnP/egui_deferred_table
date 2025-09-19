@@ -2,7 +2,7 @@ extern crate core;
 
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
-use egui_deferred_table::{Action, AxisParameters, DeferredTable};
+use egui_deferred_table::{Action, AxisParameters, DeferredTable, SimpleTupleRenderer};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
 use shared::data::futurama;
@@ -203,7 +203,7 @@ struct TabContext<'a> {
 fn contents_inside_scroll_area(
     ui: &mut Ui,
     context: &mut TabContext,
-    _state: &mut InsideScrollAreaState,
+    state: &mut InsideScrollAreaState,
 ) {
     ui.label("content above scroll area");
     ui.separator();
@@ -213,6 +213,7 @@ fn contents_inside_scroll_area(
         ui.label("content above table, inside scroll area");
 
         let mut data_source = context.data.as_slice();
+
         let column_params = futurama::fields()
             .iter()
             .map(|field| AxisParameters::default().name(field.to_string()))
@@ -221,7 +222,7 @@ fn contents_inside_scroll_area(
         let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
             .column_parameters(&column_params)
             .min_size((400.0, 400.0).into())
-            .show(ui, &mut data_source);
+            .show(ui, &mut data_source, &mut state.renderer);
 
         for action in actions {
             match action {
@@ -246,6 +247,7 @@ fn contents_inside_scroll_area(
 #[derive(Default)]
 pub struct InsideScrollAreaState {
     // here we could add state for table properties/presentation/etc.
+    renderer: SimpleTupleRenderer,
 }
 
 fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut SimpleTableState) {
@@ -323,7 +325,7 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
         .column_parameters(&column_params)
-        .show(ui, &mut data_source);
+        .show(ui, &mut data_source, &mut _state.renderer);
 
     for action in actions {
         match action {
@@ -342,6 +344,7 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
 #[derive(Default)]
 pub struct SimpleTableState {
     // here we could add state for table properties/presentation/etc.
+    renderer: SimpleTupleRenderer,
 }
 
 fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
@@ -361,7 +364,7 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
         .column_parameters(&column_params)
-        .show(ui, &mut data_source);
+        .show(ui, &mut data_source, &mut _state.renderer);
 
     for action in actions {
         match action {
@@ -380,6 +383,7 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
 #[derive(Default)]
 pub struct LogState {
     // here would could add a filter, etc.
+    renderer: SimpleTupleRenderer,
 }
 
 fn contents_spreadsheet(ui: &mut Ui, context: &mut TabContext, state: &mut SpreadsheetState) {
@@ -434,3 +438,40 @@ fn contents_growing_table(ui: &mut Ui, context: &mut TabContext, state: &mut Gro
         }
     }
 }
+//
+// #[derive(Default)]
+// struct SimpleTuple8Renderer {}
+//
+// impl DeferredTableRenderer<&[RowType]> for SimpleTuple8Renderer {
+//     fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, source: &&[RowType]) {
+//         if let Some(row_data) = source.get(cell_index.row) {
+//             match cell_index.column {
+//                 0 => ui.label(row_data.0.to_string()),
+//                 1 => ui.label(row_data.1.to_string()),
+//                 2 => ui.label(row_data.2.to_string()),
+//                 3 => ui.label(row_data.3.to_string()),
+//                 4 => ui.label(row_data.4.to_string()),
+//                 5 => ui.label(row_data.5.to_string()),
+//                 6 => ui.label(row_data.6.to_string()),
+//                 7 => ui.label(row_data.7.to_string()),
+//                 _ => panic!("cell_index out of bounds. {:?}", cell_index),
+//             };
+//         }
+//     }
+// }
+//
+// #[derive(Default)]
+// struct SimpleTuple3Renderer {}
+//
+// impl DeferredTableRenderer<&[LogEntry]> for SimpleTuple3Renderer {
+//     fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, source: &&[LogEntry]) {
+//         if let Some(row_data) = source.get(cell_index.row) {
+//             match cell_index.column {
+//                 0 => ui.label(row_data.0.to_string()),
+//                 1 => ui.label(row_data.1.to_string()),
+//                 2 => ui.label(row_data.2.to_string()),
+//                 _ => panic!("cell_index out of bounds. {:?}", cell_index),
+//             };
+//         }
+//     }
+// }

@@ -161,9 +161,17 @@ impl DeferredTableDataSource for GrowingSource<CellState<CellValue>> {
     }
 }
 
-impl DeferredTableRenderer for GrowingSource<CellState<CellValue>> {
-    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex) {
-        let Some(cell_state) = self.get_cell_value(cell_index) else {
+#[derive(Default)]
+struct GrowingSourceRenderer {}
+
+impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>> for GrowingSourceRenderer {
+    fn render_cell(
+        &self,
+        ui: &mut Ui,
+        cell_index: CellIndex,
+        data_source: &GrowingSource<CellState<CellValue>>,
+    ) {
+        let Some(cell_state) = data_source.get_cell_value(cell_index) else {
             return;
         };
 

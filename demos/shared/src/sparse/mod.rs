@@ -22,7 +22,10 @@ pub struct SparseMapSource<V> {
 
     // cached dimensions, lazily calculated
     extents: Cell<Option<TableDimensions>>,
+}
 
+#[derive(Debug)]
+pub struct SparseMapRenderer {
     rows_to_filter: Option<Vec<usize>>,
     columns_to_filter: Option<Vec<usize>>,
 
@@ -30,16 +33,66 @@ pub struct SparseMapSource<V> {
     column_ordering: Option<Vec<usize>>,
 }
 
-impl<V> SparseMapSource<V> {
+impl SparseMapRenderer {
     pub fn new() -> Self {
         Self {
-            sparse_map: IndexMap::new(),
-            extents: Cell::new(None),
             rows_to_filter: None,
             columns_to_filter: None,
 
             row_ordering: None,
             column_ordering: None,
+        }
+    }
+}
+
+impl DeferredTableRenderer<SparseMapSource<CellKind>> for SparseMapRenderer {
+    fn render_cell(
+        &self,
+        ui: &mut egui::Ui,
+        cell_index: CellIndex,
+        data_source: &SparseMapSource<CellKind>,
+    ) {
+        if let Some(value) = data_source.get(cell_index.row, cell_index.column) {
+            match value {
+                // use some arbitrary formatting and color so we can tell the difference between the data types
+                CellKind::Float(value) => {
+                    ui.colored_label(Color32::LIGHT_GREEN, format!("{:.2}", value));
+                }
+                CellKind::Boolean(value) => {
+                    ui.add_enabled_ui(false, |ui| {
+                        let mut value = *value;
+                        ui.add(egui::Checkbox::without_text(&mut value));
+                    });
+                }
+                CellKind::Text(value) => {
+                    ui.colored_label(Color32::LIGHT_BLUE, value);
+                }
+            }
+        }
+    }
+
+    fn rows_to_filter(&self) -> Option<&[usize]> {
+        self.rows_to_filter.as_ref().map(|v| v.as_slice())
+    }
+
+    fn columns_to_filter(&self) -> Option<&[usize]> {
+        self.columns_to_filter.as_ref().map(|v| v.as_slice())
+    }
+
+    fn row_ordering(&self) -> Option<&[usize]> {
+        self.row_ordering.as_ref().map(|v| v.as_slice())
+    }
+
+    fn column_ordering(&self) -> Option<&[usize]> {
+        self.column_ordering.as_ref().map(|v| v.as_slice())
+    }
+}
+
+impl<V> SparseMapSource<V> {
+    pub fn new() -> Self {
+        Self {
+            sparse_map: IndexMap::new(),
+            extents: Cell::new(None),
         }
     }
 
@@ -104,44 +157,6 @@ impl<V> DeferredTableDataSource for SparseMapSource<V> {
         self.extents.set(Some(extents));
 
         extents
-    }
-
-    fn rows_to_filter(&self) -> Option<&[usize]> {
-        self.rows_to_filter.as_ref().map(|v| v.as_slice())
-    }
-
-    fn columns_to_filter(&self) -> Option<&[usize]> {
-        self.columns_to_filter.as_ref().map(|v| v.as_slice())
-    }
-
-    fn row_ordering(&self) -> Option<&[usize]> {
-        self.row_ordering.as_ref().map(|v| v.as_slice())
-    }
-
-    fn column_ordering(&self) -> Option<&[usize]> {
-        self.column_ordering.as_ref().map(|v| v.as_slice())
-    }
-}
-
-impl DeferredTableRenderer for SparseMapSource<CellKind> {
-    fn render_cell(&self, ui: &mut egui::Ui, cell_index: CellIndex) {
-        if let Some(value) = self.get(cell_index.row, cell_index.column) {
-            match value {
-                // use some arbitrary formatting and color so we can tell the difference between the data types
-                CellKind::Float(value) => {
-                    ui.colored_label(Color32::LIGHT_GREEN, format!("{:.2}", value));
-                }
-                CellKind::Boolean(value) => {
-                    ui.add_enabled_ui(false, |ui| {
-                        let mut value = *value;
-                        ui.add(egui::Checkbox::without_text(&mut value));
-                    });
-                }
-                CellKind::Text(value) => {
-                    ui.colored_label(Color32::LIGHT_BLUE, value);
-                }
-            }
-        }
     }
 }
 

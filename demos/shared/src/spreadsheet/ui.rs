@@ -1,4 +1,4 @@
-use crate::spreadsheet::SpreadsheetSource;
+use crate::spreadsheet::{SpreadsheetRenderer, SpreadsheetSource};
 use egui::{Response, Ui};
 use egui_deferred_table::{
     Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource,
@@ -7,6 +7,8 @@ use log::debug;
 
 pub struct SpreadsheetState {
     data_source: SpreadsheetSource,
+    renderer: SpreadsheetRenderer,
+
     value: Option<(CellIndex, String)>,
     automatic_recalculation: bool,
 
@@ -77,7 +79,7 @@ impl SpreadsheetState {
             .column_parameters(column_params)
             .row_parameters(row_params)
             .highlight_hovered_cell()
-            .show(ui, &mut self.data_source)
+            .show(ui, &mut self.data_source, &mut self.renderer)
     }
 }
 
@@ -85,6 +87,7 @@ impl Default for SpreadsheetState {
     fn default() -> Self {
         Self {
             data_source: SpreadsheetSource::new(),
+            renderer: SpreadsheetRenderer::default(),
             value: None,
             automatic_recalculation: false,
             column_parameters: None,
