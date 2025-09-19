@@ -4,7 +4,6 @@ use egui::{
     Color32, Context, CornerRadius, Id, NumExt, Painter, PointerButton, PopupAnchor, Pos2, Rangef,
     Rect, Response, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, Vec2,
 };
-use indexmap::IndexMap;
 use log::{info, trace};
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -13,20 +12,21 @@ use std::ops::Range;
 const SHOW_HEADER_CELL_BORDERS: bool = false;
 const SHOW_CELL_BORDERS: bool = false;
 
-pub struct DeferredTable<DataSource> {
+pub struct DeferredTable<'a, DataSource> {
     id: Id,
-    parameters: DeferredTableParameters,
+    parameters: DeferredTableParameters<'a>,
     phantom_data: PhantomData<DataSource>,
 }
 
-struct DeferredTableParameters {
+struct DeferredTableParameters<'a> {
     default_cell_size: Option<Vec2>,
     zero_based_headers: bool,
     highlight_hovered_cell: bool,
     min_size: Vec2,
+    column_parameters: Option<&'a Vec<ColumnParameters>>,
 }
 
-impl Default for DeferredTableParameters {
+impl<'a> Default for DeferredTableParameters<'a> {
     fn default() -> Self {
         Self {
             default_cell_size: None,
@@ -34,11 +34,12 @@ impl Default for DeferredTableParameters {
             highlight_hovered_cell: false,
             // TODO use a constant for this
             min_size: Vec2::new(400.0, 200.0),
+            column_parameters: None,
         }
     }
 }
 
-impl<DataSource> DeferredTable<DataSource> {
+impl<'a, DataSource> DeferredTable<'a, DataSource> {
     pub fn new(id: Id) -> Self {
         Self {
             id,
@@ -77,12 +78,12 @@ impl<DataSource> DeferredTable<DataSource> {
         self
     }
 
-    pub fn show(
-        &self,
-        ui: &mut Ui,
-        data_source: &mut DataSource,
-        build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
-    ) -> (Response, Vec<Action>)
+    pub fn column_parameters(mut self, column_parameters: &'a Vec<ColumnParameters>) -> Self {
+        self.parameters.column_parameters = Some(column_parameters);
+        self
+    }
+
+    pub fn show(&self, ui: &mut Ui, data_source: &mut DataSource) -> (Response, Vec<Action>)
     where
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
     {
@@ -93,7 +94,7 @@ impl<DataSource> DeferredTable<DataSource> {
         let dimensions = data_source.get_dimensions();
 
         let result = if !dimensions.is_empty() {
-            self.show_inner(ui, data_source, dimensions, build_table_view)
+            self.show_inner(ui, data_source, dimensions)
         } else {
             (ui.response(), vec![])
         };
@@ -113,7 +114,6 @@ impl<DataSource> DeferredTable<DataSource> {
         ui: &mut Ui,
         data_source: &mut DataSource,
         dimensions: TableDimensions,
-        build_table_view: impl FnOnce(&mut DeferredTableBuilder<'_, DataSource>),
     ) -> (Response, Vec<Action>)
     where
         DataSource: DeferredTableDataSource + DeferredTableRenderer,
@@ -158,8 +158,6 @@ impl<DataSource> DeferredTable<DataSource> {
         let mut state = DeferredTablePersistentState::load_or_default(&ctx, persistent_state_id);
 
         trace!("dimensions: {:?}", dimensions);
-
-        let mut source_state = SourceState { dimensions };
 
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
@@ -208,11 +206,6 @@ impl<DataSource> DeferredTable<DataSource> {
             let previous_cell_origin = temp_state.cell_origin;
             trace!("previous_cell_origin: {:?}", previous_cell_origin);
 
-            let mut builder = DeferredTableBuilder::new(&mut source_state, data_source);
-
-            build_table_view(&mut builder);
-
-
             // ensure there is a column width for each possible column
             if state.column_widths.len() < dimensions.column_count {
                 // Note: We do not truncate the column widths, so that if a data source has `n` columns, then later `< n` columns
@@ -220,16 +213,18 @@ impl<DataSource> DeferredTable<DataSource> {
                 state.column_widths.resize(dimensions.column_count, inner_cell_size.x);
 
                 // apply default widths
-                builder.table.columns.iter().for_each(|(index, column)| {
-                    if let Some(default_width) = column.default_width {
-                        let sanitized_width = if column.resizable {
-                            column.width_range.clamp(default_width)
-                        } else {
-                            default_width
-                        };
-                        state.column_widths[*index] = sanitized_width;
-                    }
-                })
+                if let Some(column_parameters) = self.parameters.column_parameters {
+                    column_parameters.iter().enumerate().for_each(|(index, column)| {
+                        if let Some(default_width) = column.default_width {
+                            let sanitized_width = if column.resizable {
+                                column.width_range.clamp(default_width)
+                            } else {
+                                default_width
+                            };
+                            state.column_widths[index] = sanitized_width;
+                        }
+                    });
+                }
             }
 
             // ensure there is a row height for each possible row
@@ -553,7 +548,10 @@ impl<DataSource> DeferredTable<DataSource> {
                                 let mut drag_tooltip_message = None;
 
                                 if matches!(cell_kind, CellKind::ColumnHeader) {
-                                    let column_parameters = builder.table.columns.get(&mapped_column_index).unwrap_or_else(|| {
+                                    let column_parameters = self.parameters.column_parameters
+                                        .map(|it|it.get(mapped_column_index))
+                                        .flatten()
+                                        .unwrap_or_else(|| {
                                         &default_column_parameters
                                     });
 
@@ -702,7 +700,11 @@ impl<DataSource> DeferredTable<DataSource> {
                                         Some(format!("{}*{} ({},{})", dimensions.column_count, dimensions.row_count, cell_origin.column, cell_origin.row))
                                     }
                                     CellKind::ColumnHeader => {
-                                        if let Some(column) = builder.table.columns.get(&mapped_column_index) {
+                                        if let Some(column) = self.parameters
+                                            .column_parameters
+                                            .map(|it| it.get(mapped_column_index))
+                                            .flatten()
+                                        {
                                             column.name.clone()
                                         } else if self.parameters.zero_based_headers {
                                             Some(mapped_column_index.to_string())
@@ -1213,100 +1215,6 @@ pub trait DeferredTableRenderer {
     fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex);
 }
 
-pub struct DeferredTableBuilder<'a, DataSource> {
-    table: Table,
-
-    source_state: &'a mut SourceState,
-
-    data_source: &'a DataSource,
-}
-
-impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
-    pub fn header(&mut self, builder_header_view: fn(&'_ mut HeaderBuilder<'_, DataSource>)) {
-        let mut header_builder =
-            HeaderBuilder::new(&mut self.table, &mut self.source_state, self.data_source);
-
-        builder_header_view(&mut header_builder);
-    }
-}
-
-struct Table {
-    columns: IndexMap<usize, ColumnParameters>,
-    // TODO column groups here..
-}
-
-impl<'a, DataSource> DeferredTableBuilder<'a, DataSource> {
-    fn new(source_state: &'a mut SourceState, data_source: &'a DataSource) -> Self
-    where
-        DataSource: DeferredTableDataSource + DeferredTableRenderer,
-    {
-        let table = Table {
-            columns: IndexMap::new(),
-        };
-
-        Self {
-            table,
-            source_state,
-            data_source,
-        }
-    }
-
-    pub fn source(&mut self) -> &DataSource {
-        self.data_source
-    }
-}
-
-#[derive(Debug)]
-struct SourceState {
-    /// (rows, columns) aka (x,y)
-    dimensions: TableDimensions,
-}
-
-pub struct HeaderBuilder<'a, DataSource> {
-    table: &'a mut Table,
-    source_state: &'a mut SourceState,
-    data_source: &'a DataSource,
-}
-
-impl<'a, DataSource> HeaderBuilder<'a, DataSource> {
-    fn new(
-        table: &'a mut Table,
-        source_state: &'a mut SourceState,
-        data_source: &'a DataSource,
-    ) -> Self {
-        Self {
-            table,
-            source_state,
-            data_source,
-        }
-    }
-
-    pub fn source(&mut self) -> &DataSource {
-        self.data_source
-    }
-
-    pub fn current_dimensions(&self) -> TableDimensions {
-        self.source_state.dimensions
-    }
-
-    pub fn column(&mut self, index: usize, name: String) -> &mut ColumnParameters {
-        self.ensure_column_parameters(index);
-
-        let parameters = &mut self.table.columns[index];
-        parameters.name = Some(name);
-
-        parameters
-    }
-
-    fn ensure_column_parameters(&mut self, index: usize) {
-        while self.table.columns.len() <= index {
-            self.table
-                .columns
-                .insert(index, ColumnParameters::default());
-        }
-    }
-}
-
 /// Specifies the column parameters.
 ///
 /// Since min/max/default width can all conflict or be specified in different orders they must be sanitized before use
@@ -1336,7 +1244,12 @@ impl Default for ColumnParameters {
 }
 
 impl ColumnParameters {
-    pub fn default_width(&mut self, value: f32) -> &mut Self {
+    pub fn name(mut self, s: impl Into<String>) -> Self {
+        self.name = Some(s.into());
+        self
+    }
+
+    pub fn default_width(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
         self.default_width = Some(value.at_least(0.0));
         self
@@ -1346,7 +1259,7 @@ impl ColumnParameters {
     ///
     /// if the column is resizable, then the minimum width might be larger the value specified here, or the default,
     /// due to the space required for resize handles and resize handle interaction constraints
-    pub fn minimum_width(&mut self, value: f32) -> &mut Self {
+    pub fn minimum_width(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
         self.width_range.min = value.at_least(0.0);
         self
@@ -1355,13 +1268,13 @@ impl ColumnParameters {
     /// a value f32::INFINITY allows the column to be resized to be as large as possible
     ///
     /// default: f32::INFINITY
-    pub fn maximum_width(&mut self, value: f32) -> &mut Self {
+    pub fn maximum_width(mut self, value: f32) -> Self {
         debug_assert!(value >= 0.0);
         self.width_range.max = value.at_least(0.0);
         self
     }
 
-    pub fn resizable(&mut self, value: bool) -> &mut Self {
+    pub fn resizable(mut self, value: bool) -> Self {
         self.resizable = value;
         self
     }

@@ -19,12 +19,7 @@ pub fn show_table(ui: &mut Ui, state: &mut GrowingTableState) -> (Response, Vec<
 
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
-        .show(ui, data_source, |builder| {
-            builder.header(|_header_builder| {
-
-                // no need to define every column unless there's something specific
-            })
-        })
+        .show(ui, data_source)
 }
 
 pub fn show_controls(ui: &mut Ui, state: &mut GrowingTableState) {

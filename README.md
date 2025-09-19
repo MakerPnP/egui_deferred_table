@@ -105,6 +105,11 @@ Possible log types:
 - `[fixed]` for any bug fixes.
 - `[security]` to invite users to upgrade in case of vulnerabilities.
 
+### (unreleased)
+
+- [changed] Remove the `DeferredTableBuilder` in favor of a solution that allows caching of the column parameters on an 
+  as-required basis so they do not have to be built every frame.
+
 ### 0.1.4 (2025/09/10)
 
 - [fixed] Fix panic when column constraints are not specified for a column.

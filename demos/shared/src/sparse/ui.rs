@@ -75,11 +75,7 @@ pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<A
     DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
         .highlight_hovered_cell()
-        .show(ui, data_source, |builder| {
-            builder.header(|_header_builder| {
-                // no need to define every column unless there's something specific
-            })
-        })
+        .show(ui, data_source)
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {

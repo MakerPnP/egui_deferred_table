@@ -2,7 +2,7 @@ extern crate core;
 
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
-use egui_deferred_table::{Action, DeferredTable, DeferredTableBuilder};
+use egui_deferred_table::{Action, ColumnParameters, DeferredTable};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
 use shared::data::futurama;
@@ -213,16 +213,15 @@ fn contents_inside_scroll_area(
         ui.label("content above table, inside scroll area");
 
         let mut data_source = context.data.as_slice();
+        let column_params = futurama::fields()
+            .iter()
+            .map(|field| ColumnParameters::default().name(field.to_string()))
+            .collect::<Vec<_>>();
 
         let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+            .column_parameters(&column_params)
             .min_size((400.0, 400.0).into())
-            .show(ui, &mut data_source, |builder| {
-                builder.header(|header_builder| {
-                    for (index, field) in futurama::fields().iter().enumerate() {
-                        header_builder.column(index, field.to_string());
-                    }
-                })
-            });
+            .show(ui, &mut data_source);
 
         for action in actions {
             match action {
@@ -309,24 +308,22 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
     ];
     let mut data_source = context.data.as_slice();
 
-    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1")).show(
-        ui,
-        &mut data_source,
-        |builder: &mut DeferredTableBuilder<'_, &[RowType]>| {
-            builder.header(|header_builder| {
-                for (index, (field, params)) in
-                    futurama::fields().iter().zip(FIELD_PARAMS).enumerate()
-                {
-                    header_builder
-                        .column(index, field.to_string())
-                        .resizable(params.resizable)
-                        .default_width(params.default_width)
-                        .minimum_width(params.minimum_width)
-                        .maximum_width(params.maximum_width);
-                }
-            })
-        },
-    );
+    let column_params = futurama::fields()
+        .iter()
+        .zip(FIELD_PARAMS)
+        .map(|(field_name, field_params)| {
+            ColumnParameters::default()
+                .name(field_name.to_string())
+                .resizable(field_params.resizable)
+                .default_width(field_params.default_width)
+                .minimum_width(field_params.minimum_width)
+                .maximum_width(field_params.maximum_width)
+        })
+        .collect::<Vec<_>>();
+
+    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+        .column_parameters(&column_params)
+        .show(ui, &mut data_source);
 
     for action in actions {
         match action {
@@ -350,23 +347,21 @@ pub struct SimpleTableState {
 fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
     let mut data_source = context.log_entries.as_slice();
 
-    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1")).show(
-        ui,
-        &mut data_source,
-        |builder| {
-            builder.header(|header_builder| {
-                for (index, (name, width)) in
-                    [("Time", 200.0), ("Level", 100.0), ("Message", 400.0)]
-                        .into_iter()
-                        .enumerate()
-                {
-                    header_builder
-                        .column(index, name.to_string())
-                        .default_width(width);
-                }
-            })
-        },
-    );
+    let column_params = vec![
+        ColumnParameters::default()
+            .name("Time".to_string())
+            .default_width(200.0),
+        ColumnParameters::default()
+            .name("Level".to_string())
+            .default_width(100.0),
+        ColumnParameters::default()
+            .name("Message".to_string())
+            .default_width(400.0),
+    ];
+
+    let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
+        .column_parameters(&column_params)
+        .show(ui, &mut data_source);
 
     for action in actions {
         match action {

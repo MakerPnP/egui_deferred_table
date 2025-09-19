@@ -1,12 +1,16 @@
 use crate::spreadsheet::SpreadsheetSource;
 use egui::{Response, Ui};
-use egui_deferred_table::{Action, CellIndex, DeferredTable, TableDimensions};
+use egui_deferred_table::{
+    Action, CellIndex, ColumnParameters, DeferredTable, DeferredTableDataSource,
+};
 use log::debug;
 
 pub struct SpreadsheetState {
     data_source: SpreadsheetSource,
     value: Option<(CellIndex, String)>,
     automatic_recalculation: bool,
+
+    column_parameters: Option<Vec<ColumnParameters>>,
 }
 
 impl SpreadsheetState {
@@ -21,6 +25,34 @@ impl SpreadsheetState {
     pub fn recalculate(&mut self) {
         self.data_source.recalculate();
     }
+
+    pub fn build_and_show_table(&mut self, ui: &mut Ui) -> (Response, Vec<Action>) {
+        let dimensions = self.data_source.get_dimensions();
+
+        let rebuild = match &self.column_parameters {
+            None => true,
+            Some(column_parameters) => column_parameters.len() != dimensions.column_count,
+        };
+
+        if rebuild {
+            let column_parameters = (0..dimensions.column_count)
+                .map(|index| {
+                    let column_name = SpreadsheetSource::make_column_name(index);
+                    ColumnParameters::default().name(column_name)
+                })
+                .collect();
+            self.column_parameters = Some(column_parameters);
+        }
+
+        let column_params = self.column_parameters.as_ref().unwrap();
+
+        DeferredTable::new(ui.make_persistent_id("table_1"))
+            // in this example, the spreadsheet maintains the column parameters so we don't need
+            // to build them every frame
+            .column_parameters(column_params)
+            .highlight_hovered_cell()
+            .show(ui, &mut self.data_source)
+    }
 }
 
 impl Default for SpreadsheetState {
@@ -29,28 +61,13 @@ impl Default for SpreadsheetState {
             data_source: SpreadsheetSource::new(),
             value: None,
             automatic_recalculation: false,
+            column_parameters: None,
         }
     }
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SpreadsheetState) -> (Response, Vec<Action>) {
-    let data_source = &mut state.data_source;
-
-    DeferredTable::new(ui.make_persistent_id("table_1"))
-        .highlight_hovered_cell()
-        .show(ui, &mut *data_source, |builder| {
-        builder.header(|header_builder| {
-            let TableDimensions {
-                row_count: _,
-                column_count,
-            } = header_builder.current_dimensions();
-
-            for index in 0..column_count {
-                let column_name = SpreadsheetSource::make_column_name(index);
-                header_builder.column(index, column_name);
-            }
-        })
-    })
+    state.build_and_show_table(ui)
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {
