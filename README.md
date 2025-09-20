@@ -51,6 +51,14 @@ When a user interacts with the table, a `vec` of `Action` is returned so that yo
 
 Rendering code is separated from data-source related code.
 
+It's possible to use the same data-source, but with different renderers, see the 'projections' demo for an example.
+
+### i18n support
+
+The API is designed so that there is no embedded strings, and so that the use of i18n is not prevented or difficult when
+rendering rows/columns/cells.  Indeed, there are apps using the [egui_i18n crate](https://crates.io/crates/egui-i18n) along with this crate.
+If this crate ever evolves to needing strings, i18n support will be baked-in/abstracted.
+
 ## Status
 
 This crate is work-in-progress, it aims to provide a 'batteries-included' solution that works for many different sources
@@ -81,7 +89,7 @@ Demos include examples of data sources using spreadsheets, background-loaded, sp
 Demos include simple and complex UIs, check out the 'docking' example which combines many of the other examples into a single demo
 which uses `egui_dock` tabs and windows for each demo.
 
-The 'spreadsheet' demo, is a working spreadsheet, with formulas and cell re-calculation.
+The 'spreadsheet' demo is a working spreadsheet, with formulas and cell re-calculation.
 
 ## License
 
@@ -107,7 +115,7 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
-### (unreleased)
+### 0.1.5 (2025/09/21)
 
 - [changed] Remove the `DeferredTableBuilder` in favor of a solution that allows caching of the column parameters on an 
   as-required basis so they do not have to be built every frame.
