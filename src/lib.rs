@@ -419,7 +419,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                         // note, if the scroll area doesn't line up exactly with the viewport, then we may have to render additional rows/columns that
                         // are outside of this rect
                         let rect = Rect::from_min_max((first_column.start, first_row.start).into(), (last_column.end, last_row.end).into())
-                            .translate(ui.max_rect().min.to_vec2());
+                            .translate(ui.max_rect().min.to_vec2())
+                            .round_to_pixels(pixels_per_point);
 
                         trace!("rect: {:?}", rect);
                         if false {
