@@ -1,6 +1,6 @@
 extern crate core;
 
-use egui::ViewportBuilder;
+use egui::{Ui, ViewportBuilder};
 use shared::spreadsheet::ui::SpreadsheetState;
 
 fn main() -> eframe::Result<()> {
@@ -33,28 +33,43 @@ impl Default for MyApp {
     }
 }
 
+impl MyApp {
+    fn top_panel_content(&mut self, ui: &mut Ui) {
+        egui::Sides::new().show(
+            ui,
+            |ui| {
+                ui.label("Spreadsheet demo");
+            },
+            |ui| {
+                ui.checkbox(&mut self.inspection, "🔍 Inspection");
+            },
+        );
+    }
+
+    fn central_panel_content(&mut self, ui: &mut Ui) {
+        shared::spreadsheet::ui::show_controls(ui, &mut self.state);
+
+        ui.label("content above");
+        ui.separator();
+        egui::ScrollArea::both().show(ui, |ui| {
+            let (_response, actions) = shared::spreadsheet::ui::show_table(ui, &mut self.state);
+
+            shared::spreadsheet::ui::handle_actions(actions, &mut self.state);
+        });
+
+        ui.separator();
+        ui.label("content below");
+    }
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Spreadsheet demo");
-                ui.checkbox(&mut self.inspection, "🔍 Inspection");
-            });
+            self.top_panel_content(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            shared::spreadsheet::ui::show_controls(ui, &mut self.state);
-
-            ui.label("content above");
-            ui.separator();
-            egui::ScrollArea::both().show(ui, |ui| {
-                let (_response, actions) = shared::spreadsheet::ui::show_table(ui, &mut self.state);
-
-                shared::spreadsheet::ui::handle_actions(actions, &mut self.state);
-            });
-
-            ui.separator();
-            ui.label("content below");
+            self.central_panel_content(ui);
         });
 
         // Inspection window

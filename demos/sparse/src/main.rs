@@ -90,9 +90,14 @@ impl MyApp {
     }
 
     fn top_panel_content(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Sparse data demo");
-            ui.checkbox(&mut self.inspection, "🔍 Inspection");
-        });
+        egui::Sides::new().show(
+            ui,
+            |ui| {
+                ui.label("Sparse data demo");
+            },
+            |ui| {
+                ui.checkbox(&mut self.inspection, "🔍 Inspection");
+            },
+        );
     }
 }

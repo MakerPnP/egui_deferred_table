@@ -105,27 +105,42 @@ fn example_log(entries: &mut Vec<LogEntry>, level: Level, message: String) {
     entries.push(entry);
 }
 
-impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+impl MyApp {
+    fn top_panel_content(&mut self, ui: &mut Ui) {
+        egui::Sides::new().show(
+            ui,
+            |ui| {
+                ui.label("Docking windows demo");
+            },
+            |ui| {
+                ui.checkbox(&mut self.inspection, "🔍 Inspection");
+            },
+        );
+    }
+
+    fn central_panel_content(&mut self, ui: &mut Ui) {
         let mut tab_context = TabContext {
             data: &mut self.data,
             log_entries: &mut self.log_entries,
         };
 
+        DockArea::new(&mut self.tree).show_inside(
+            ui,
+            &mut TabViewer {
+                context: &mut tab_context,
+            },
+        );
+    }
+}
+
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Fixed data demo");
-                ui.checkbox(&mut self.inspection, "🔍 Inspection");
-            });
+            self.top_panel_content(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            DockArea::new(&mut self.tree).show_inside(
-                ui,
-                &mut TabViewer {
-                    context: &mut tab_context,
-                },
-            );
+            self.central_panel_content(ui);
         });
 
         // Inspection window
