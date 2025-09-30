@@ -1,13 +1,13 @@
 use crate::spreadsheet::{SpreadsheetRenderer, SpreadsheetSource};
 use egui::{Response, Ui};
-use egui_deferred_table::{
-    Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource,
-};
+use egui_deferred_table::{Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource, EditableTableRenderer, EditorState};
 use log::debug;
 
 pub struct SpreadsheetState {
     data_source: SpreadsheetSource,
     renderer: SpreadsheetRenderer,
+    editor: SpreadsheetEditor,
+    edit_state: EditorState<String, String>,
 
     value: Option<(CellIndex, String)>,
     automatic_recalculation: bool,
@@ -79,7 +79,7 @@ impl SpreadsheetState {
             .column_parameters(column_params)
             .row_parameters(row_params)
             .highlight_hovered_cell()
-            .show(ui, &mut self.data_source, &mut self.renderer)
+            .show_and_edit(ui, &mut self.data_source, &mut self.renderer, &mut self.editor, &mut self.edit_state)
     }
 }
 
@@ -88,6 +88,8 @@ impl Default for SpreadsheetState {
         Self {
             data_source: SpreadsheetSource::new(),
             renderer: SpreadsheetRenderer::default(),
+            editor: SpreadsheetEditor::default(),
+            edit_state: EditorState::default(),
             value: None,
             automatic_recalculation: false,
             column_parameters: None,
@@ -161,4 +163,29 @@ pub fn show_controls(ui: &mut Ui, state: &mut SpreadsheetState) {
             });
         }
     });
+}
+
+#[derive(Default)]
+struct SpreadsheetEditor {}
+
+impl EditableTableRenderer<SpreadsheetSource> for SpreadsheetEditor {
+    // in a spreadsheet all the cells are the same type, and all cells can be edited using a string
+    // conversion from a string back to a CellValue happens when editing is finished
+    type Value = String;
+    type ItemState = String;
+
+    fn build_item_state(&self, cell_index: CellIndex, source: &mut SpreadsheetSource) -> Option<(Self::ItemState, Self::Value)> {
+
+        let value = source.get_cell_value(cell_index).unwrap().to_editable();
+
+        Some((value.clone(), value))
+    }
+
+    fn on_edit_complete(&mut self, index: CellIndex, state: Self::ItemState, _original_item: Self::Value, source: &mut SpreadsheetSource) {
+        source.set_cell_value(&index, &state);
+    }
+
+    fn render_cell_editor(&self, ui: &mut Ui, _cell_index: &CellIndex, state: &mut Self::ItemState, _original_item: &Self::Value, _source: &SpreadsheetSource) {
+        ui.text_edit_singleline(state);
+    }
 }

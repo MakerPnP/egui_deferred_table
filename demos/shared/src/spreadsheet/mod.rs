@@ -140,7 +140,7 @@ impl SpreadsheetSource {
         cell_value
     }
 
-    pub fn set_cell_value(&mut self, cell_index: &mut CellIndex, text: &str) {
+    pub fn set_cell_value(&mut self, cell_index: &CellIndex, text: &str) {
         let value = if text.starts_with("=") {
             let formula = Formula::new(text.to_string());
             CellValue::Calculated(formula, FormulaResult::Pending)

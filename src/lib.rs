@@ -91,7 +91,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
     }
 
     pub fn show<Renderer>(
-        &self,
+        self,
         ui: &mut Ui,
         data_source: &mut DataSource,
         renderer: &mut Renderer,
@@ -100,6 +100,40 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         DataSource: DeferredTableDataSource,
         Renderer: DeferredTableRenderer<DataSource>,
     {
+        let editor: Option<&mut NullEditor> = None;
+        let edit_state: Option<&mut EditorState<(), ()>> = None;
+        self.show_outer::<Renderer, NullEditor, _, _>(ui, data_source, renderer, editor, edit_state)
+    }
+
+    pub fn show_and_edit<Renderer, Editor, IS, V>(
+        self,
+        ui: &mut Ui,
+        data_source: &mut DataSource,
+        renderer: &mut Renderer,
+        editor: &mut Editor,
+        edit_state: &mut EditorState<IS, V>,
+    ) -> (Response, Vec<Action>)
+    where
+        DataSource: DeferredTableDataSource,
+        Renderer: DeferredTableRenderer<DataSource>,
+        Editor: EditableTableRenderer<DataSource, ItemState = IS, Value = V>,
+    {
+        self.show_outer(ui, data_source, renderer, Some(editor), Some(edit_state))
+    }
+
+    fn show_outer<Renderer, Editor, IS, V>(
+        self,
+        ui: &mut Ui,
+        data_source: &mut DataSource,
+        renderer: &mut Renderer,
+        editor: Option<&mut Editor>,
+        edit_state: Option<&mut EditorState<IS, V>>,
+    ) -> (Response, Vec<Action>)
+    where
+        DataSource: DeferredTableDataSource,
+        Renderer: DeferredTableRenderer<DataSource>,
+        Editor: EditableTableRenderer<DataSource, ItemState = IS, Value = V>,
+    {
         data_source.prepare();
         // cache the dimensions now, to remain consistent, since the data_source could return different dimensions
         // each time it's called.
@@ -107,7 +141,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let dimensions = data_source.get_dimensions();
 
         let result = if !dimensions.is_empty() {
-            self.show_inner(ui, data_source, renderer, dimensions)
+            self.show_inner(ui, data_source, renderer, dimensions, edit_state, editor)
         } else {
             (ui.response(), vec![])
         };
@@ -122,16 +156,19 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
     }
 
     /// Safety: only call if the dimensions are non-empty
-    fn show_inner<Renderer>(
-        &self,
+    fn show_inner<Renderer, Editor, IS, V>(
+        mut self,
         ui: &mut Ui,
         data_source: &mut DataSource,
         renderer: &mut Renderer,
         dimensions: TableDimensions,
+        mut edit_state: Option<&mut EditorState<IS, V>>,
+        mut editor: Option<&mut Editor>,
     ) -> (Response, Vec<Action>)
     where
         DataSource: DeferredTableDataSource,
         Renderer: DeferredTableRenderer<DataSource>,
+        Editor: EditableTableRenderer<DataSource, ItemState = IS, Value = V>,
     {
         let ctx = ui.ctx().clone();
         let style = ui.style();
@@ -941,7 +978,12 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         // FIXME this doesn't track if the click location is in the same cell, that is, this will
                                         //       be triggered if you click somewhere, then release in this cell.
                                         //       which is not the intention.
+
                                         actions.push(Action::CellClicked(cell_index));
+
+                                        if let (Some(editor), Some(edit_state)) = (editor.as_mut(), edit_state.as_mut()) {
+                                            self.handle_editable_cell_click(data_source, cell_index, *editor, *edit_state);
+                                        }
                                     }
 
                                     // TODO track double clicks
@@ -962,7 +1004,24 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     cell_ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                                     //cell_ui.label(format!("{:?}", cell_ui.id()));
-                                    renderer.render_cell(&mut cell_ui, cell_index, data_source);
+
+                                    let mut handled = false;
+                                    if let (Some(editor), Some(edit_state)) = (editor.as_mut(), edit_state.as_mut()) {
+                                        match &mut edit_state.state {
+                                            None => {}
+                                            Some(meh) => match meh {
+                                                CellEditState::Editing(editing_cell_index, item_state, value) if cell_index.eq(editing_cell_index) => {
+                                                    editor.render_cell_editor(&mut cell_ui, &cell_index, item_state, value, data_source);
+                                                    handled = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+
+                                    if !handled {
+                                        renderer.render_cell(&mut cell_ui, cell_index, data_source);
+                                    }
                                 }
                                 accumulated_row_heights += outer_row_height + 1.0;
                             }
@@ -1068,6 +1127,62 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             mapped_row_index = visible_row_index;
         }
         mapped_row_index
+    }
+
+    /// call this function from a cell action handler
+    pub fn handle_editable_cell_click<IS, V>(
+        &mut self,
+        source: &mut DataSource,
+        cell_index: CellIndex,
+        editor: &mut dyn EditableTableRenderer<DataSource, ItemState = IS, Value = V>,
+        edit_state: &mut EditorState<IS, V>,
+    ) {
+        match &edit_state.state {
+            None => {
+                // change selection
+                edit_state.state.replace(CellEditState::Pivot(cell_index));
+            }
+            Some(CellEditState::Pivot(pivot_cell_index)) if *pivot_cell_index == cell_index => {
+                trace!("clicked in selected cell");
+
+                // change mode to edit
+                let item_state = editor.build_item_state(cell_index, source);
+                if let Some((edit, original_item)) = item_state {
+                    edit_state.state.replace(CellEditState::Editing(
+                        cell_index,
+                        edit,
+                        original_item,
+                    ));
+                }
+            }
+            Some(CellEditState::Pivot(_)) => {
+                trace!("clicked in different cell");
+
+                // change selection
+                edit_state.state.replace(CellEditState::Pivot(cell_index));
+            }
+            Some(CellEditState::Editing(editing_cell_index, _cell_edit_state, _original_item))
+                if *editing_cell_index == cell_index =>
+            {
+                trace!("clicked in cell while editing");
+
+                // nothing to do
+            }
+            Some(CellEditState::Editing(_editing_cell_index, _cell_edit_state, _original_item)) => {
+                trace!("clicked in a different cell while editing");
+
+                // apply edited value
+                let Some(CellEditState::Editing(index, state, original_item)) =
+                    edit_state.state.take()
+                else {
+                    unreachable!();
+                };
+                editor.on_edit_complete(index, state, original_item, source);
+
+                // change selection
+                edit_state.state.replace(CellEditState::Pivot(cell_index));
+            }
+        }
     }
 }
 
@@ -1715,11 +1830,6 @@ pub trait ApplyChange<T, E> {
 }
 
 /// Implement this to enable data source editing support.
-///
-/// Usually implemented on the table renderer, not the data source.
-///
-/// The implementation needs to own a `CellEditState`.
-/// typically the renderer just has a member like this: `edit_state: Option<CellEditState<MyItemState, MyRow>>`
 pub trait EditableTableRenderer<DataSource> {
     /// Usually a type containing the data for a single row.
     type Value;
@@ -1748,81 +1858,65 @@ pub trait EditableTableRenderer<DataSource> {
         source: &mut DataSource,
     );
 
-    // the following three methods are used to update the cell edit state instance, example implementations
-    // are provided when `self` owns an
-
-    /// ```ignore
-    /// fn set_edit_state(&mut self, edit_state: CellEditState<Self::ItemState, Self::Value>) {
-    ///     self.edit_state.replace(edit_state);
-    /// }
-    /// ```
-    fn set_edit_state(&mut self, edit_state: CellEditState<Self::ItemState, Self::Value>);
-
-    /// ```ignore
-    /// fn edit_state(&self) -> Option<&CellEditState<Self::ItemState, Self::Value>> {
-    ///     self.edit_state.as_ref()
-    /// }
-    /// ```
-    fn edit_state(&self) -> Option<&CellEditState<Self::ItemState, Self::Value>>;
-
-    /// ```ignore
-    /// fn take_edit_state(&mut self) -> CellEditState<Self::ItemState, Self::Value> {
-    ///     self.edit_state.take().unwrap()
-    /// }
-    /// ```
-    fn take_edit_state(&mut self) -> CellEditState<Self::ItemState, Self::Value>;
+    /// item state is what the editor should actually edit
+    /// original item is supplied so that editor can show differences indicators when state has changed
+    /// data source is supplied in case it's needed
+    fn render_cell_editor(
+        &self,
+        ui: &mut Ui,
+        cell_index: &CellIndex,
+        state: &mut Self::ItemState,
+        original_item: &Self::Value,
+        source: &DataSource,
+    );
 }
 
-/// call this function from a cell action handler
-pub fn handle_editable_cell_click<
-    E,
-    S,
-    R: EditableTableRenderer<S, Value = T, ItemState = E>,
-    T: Clone,
->(
-    source: &mut S,
-    renderer: &mut R,
-    cell_index: CellIndex,
-) {
-    match renderer.edit_state() {
-        None => {
-            // change selection
-            renderer.set_edit_state(CellEditState::Pivot(cell_index));
-        }
-        Some(CellEditState::Pivot(pivot_cell_index)) if *pivot_cell_index == cell_index => {
-            trace!("clicked in selected cell");
+pub struct EditorState<IS, V> {
+    state: Option<CellEditState<IS, V>>,
+}
 
-            // change mode to edit
-            let edit_state = renderer.build_item_state(cell_index, source);
-            if let Some((edit, original_item)) = edit_state {
-                renderer.set_edit_state(CellEditState::Editing(cell_index, edit, original_item));
-            }
-        }
-        Some(CellEditState::Pivot(_)) => {
-            trace!("clicked in different cell");
+impl<IS, V> Default for EditorState<IS, V> {
+    fn default() -> Self {
+        Self { state: None }
+    }
+}
 
-            // change selection
-            renderer.set_edit_state(CellEditState::Pivot(cell_index));
-        }
-        Some(CellEditState::Editing(editing_cell_index, _cell_edit_state, _original_item))
-            if *editing_cell_index == cell_index =>
-        {
-            trace!("clicked in cell while editing");
+/// A dummy editor to keep the compiler happy, should get compiled out.
+struct NullEditor {}
 
-            // nothing to do
-        }
-        Some(CellEditState::Editing(_editing_cell_index, _cell_edit_state, _original_item)) => {
-            trace!("clicked in a different cell while editing");
+impl<DataSource> EditableTableRenderer<DataSource> for NullEditor {
+    type Value = ();
+    type ItemState = ();
 
-            // apply edited value
-            let CellEditState::Editing(index, state, original_item) = renderer.take_edit_state()
-            else {
-                unreachable!();
-            };
-            renderer.on_edit_complete(index, state, original_item, source);
+    fn build_item_state(
+        &self,
+        cell_index: CellIndex,
+        source: &mut DataSource,
+    ) -> Option<(Self::ItemState, Self::Value)> {
+        let (_, _) = (cell_index, source);
+        unreachable!()
+    }
 
-            // change selection
-            renderer.set_edit_state(CellEditState::Pivot(cell_index));
-        }
+    fn on_edit_complete(
+        &mut self,
+        index: CellIndex,
+        state: Self::ItemState,
+        original_item: Self::Value,
+        source: &mut DataSource,
+    ) {
+        let (_, _, _, _) = (index, state, original_item, source);
+        unreachable!()
+    }
+
+    fn render_cell_editor(
+        &self,
+        ui: &mut Ui,
+        cell_index: &CellIndex,
+        state: &mut Self::ItemState,
+        original_item: &Self::Value,
+        source: &DataSource,
+    ) {
+        let (_, _, _, _, _) = (ui, cell_index, state, original_item, source);
+        unreachable!()
     }
 }
