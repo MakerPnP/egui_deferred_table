@@ -411,9 +411,11 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                     .id_salt("table_scroll_area")
                     .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                     .show_viewport(ui, |ui, viewport_rect| {
+                        let viewport_changed = temp_state.last_viewport_rect.map_or(false, |last_viewport_rect| {
+                            last_viewport_rect != viewport_rect
+                        });
 
-                        // FIXME detect when this scroll area is dragged
-                        let table_dragged = false;
+                        temp_state.last_viewport_rect = Some(viewport_rect);
 
                         trace!("max_rect: {:?}, viewport_rect: {:?}", ui.max_rect(), viewport_rect);
                         //ui.painter().debug_rect(ui.max_rect(), Color32::RED, "mr");
@@ -1072,7 +1074,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                                                         let cells_clip_rect_contains_pointer = cells_clip_rect.contains(pointer_interact_pos);
 
-                                                        trace!("clicked_elsewhere: {}, response_rect_contains_pointer: {}, any_down: {}, contains_pointer: {}, cells_dragged: {}", window_clicked_elsewhere, cells_clip_rect_contains_pointer, any_down, window_contains_pointer, table_dragged);
+                                                        trace!("clicked_elsewhere: {}, response_rect_contains_pointer: {}, any_down: {}, contains_pointer: {}, viewport_changed: {}", window_clicked_elsewhere, cells_clip_rect_contains_pointer, any_down, window_contains_pointer, viewport_changed);
 
                                                         // given the above issues and scenarious, we use `any_down` (see above) and since the editor window is constrained to the cells_clip_rect can see if the pointer
                                                         // is still within the table area too.
@@ -1080,8 +1082,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                                         let apply_edit = if any_down && !cells_clip_rect_contains_pointer {
                                                             trace!("applying edit due a button down and cells_clip_rect does not contain pointer");
                                                             true
-                                                        } else if table_dragged {
-                                                            trace!("applying edit due to table drag detected");
+                                                        } else if viewport_changed {
+                                                            trace!("applying edit due to viewport change");
                                                             true
                                                         } else {
                                                             false
@@ -1408,6 +1410,7 @@ struct DeferredTableTempState {
     cell_origin: CellIndex,
 
     drag_state: Option<DragState>,
+    last_viewport_rect: Option<Rect>,
 }
 
 #[derive(Clone, Copy)]
