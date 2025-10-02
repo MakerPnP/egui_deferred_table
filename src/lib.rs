@@ -1044,6 +1044,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                                     .min_size(cell_rect.size())
                                                     .max_width(cell_rect.width())
                                                     .show(&ctx, |ui|{
+                                                        //ui.set_min_width(cell_rect.width());
+                                                        ui.set_min_size(cell_rect.size());
                                                         editor.render_cell_editor(ui, &cell_index, item_state, value, data_source);
                                                     });
 
