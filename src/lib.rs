@@ -1871,8 +1871,9 @@ pub trait EditableTableRenderer<DataSource> {
     );
 }
 
+#[derive(Debug, Clone)]
 pub struct EditorState<IS, V> {
-    state: Option<CellEditState<IS, V>>,
+    pub state: Option<CellEditState<IS, V>>,
 }
 
 impl<IS, V> Default for EditorState<IS, V> {
