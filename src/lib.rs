@@ -183,7 +183,13 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let style = ui.style();
         let pixels_per_point = ctx.pixels_per_point();
 
-        let faint_bg_color = style.visuals.panel_fill.add(style.visuals.faint_bg_color);
+        // We need an OPAQUE 'color' so that when it's used to fill the background of the editor popup window the
+        // contents behind the window are obscured.
+        let opaque_faint_bg_color = if style.visuals.faint_bg_color.is_opaque() {
+            style.visuals.faint_bg_color
+        } else {
+            style.visuals.panel_fill.add(style.visuals.faint_bg_color)
+        };
 
         let mut actions = vec![];
 
@@ -520,7 +526,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                             }
                             row_counter += 1;
 
-                            let row_bg_color = striped_row_color(row_counter, faint_bg_color).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+                            let row_bg_color = striped_row_color(row_counter, opaque_faint_bg_color).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
 
                             let inner_row_height = match row_kind {
                                 RowKind::ValuesRow => *state.row_heights.get(mapped_row_index).unwrap_or(&inner_cell_size.y),
@@ -924,7 +930,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 let inner_row_height = state.row_heights[mapped_row_index];
                                 let outer_row_height = inner_row_height + outer_inner_difference.y;
 
-                                let row_bg_color = striped_row_color(row_counter, faint_bg_color).unwrap_or(ui.style().visuals.panel_fill);
+                                let row_bg_color = striped_row_color(row_counter, opaque_faint_bg_color).unwrap_or(ui.style().visuals.panel_fill);
 
                                 let y = start_pos.y + accumulated_row_heights;
 
