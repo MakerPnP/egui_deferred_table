@@ -1,9 +1,9 @@
 use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, Context, CornerRadius, Id, NumExt, Painter, PointerButton, PopupAnchor, Pos2, Rangef,
-    Rect, Response, RichText, Sense, StrokeKind, Style, Tooltip, Ui, UiBuilder, UiKind,
-    UiStackInfo, Vec2,
+    Color32, Context, CornerRadius, Frame, Id, Margin, NumExt, Painter, PointerButton, PopupAnchor,
+    Pos2, Rangef, Rect, Response, RichText, Sense, Shadow, Stroke, StrokeKind, Style, Tooltip, Ui,
+    UiBuilder, UiKind, UiStackInfo, Vec2,
 };
 use log::{info, trace};
 use std::marker::PhantomData;
@@ -11,6 +11,15 @@ use std::ops::Range;
 
 const SHOW_HEADER_CELL_BORDERS: bool = false;
 const SHOW_CELL_BORDERS: bool = false;
+
+const EDITOR_FRAME: Frame = Frame {
+    inner_margin: Margin::ZERO,
+    stroke: Stroke::NONE,
+    fill: Color32::TRANSPARENT,
+    corner_radius: CornerRadius::ZERO,
+    outer_margin: Margin::ZERO,
+    shadow: Shadow::NONE,
+};
 
 pub struct DeferredTable<'a, DataSource> {
     id: Id,
@@ -1006,18 +1015,33 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     //cell_ui.label(format!("{:?}", cell_ui.id()));
 
                                     let mut handled = false;
-                                    if let (Some(editor), Some(edit_state)) = (editor.as_mut(), edit_state.as_mut()) {
+
+                                    editor.as_mut().zip(edit_state.as_mut()).map(|(editor, edit_state)| {
                                         match &mut edit_state.state {
-                                            None => {}
-                                            Some(meh) => match meh {
-                                                CellEditState::Editing(editing_cell_index, item_state, value) if cell_index.eq(editing_cell_index) => {
-                                                    editor.render_cell_editor(&mut cell_ui, &cell_index, item_state, value, data_source);
-                                                    handled = true;
-                                                }
-                                                _ => {}
+                                            Some(CellEditState::Editing(editing_cell_index, item_state, value)) if cell_index.eq(editing_cell_index) => {
+
+                                                let mut editor_frame: Frame = EDITOR_FRAME;
+                                                editor_frame.fill = bg_color;
+
+                                                egui::Window::new("")
+                                                    .title_bar(false)
+                                                    .id(cell_ui.id().with("cell_editor"))
+                                                    .frame(editor_frame)
+                                                    .constrain_to(cells_clip_rect)
+                                                    .fixed_pos(cell_rect.min)
+                                                    .auto_sized()
+                                                    .default_rect(cell_rect)
+                                                    .min_size(cell_rect.size())
+                                                    .max_width(cell_rect.width())
+                                                    .show(&ctx, |ui|{
+                                                        editor.render_cell_editor(ui, &cell_index, item_state, value, data_source);
+                                                    });
+
+                                                handled = true;
                                             }
+                                            _ => {}
                                         }
-                                    }
+                                    });
 
                                     if !handled {
                                         renderer.render_cell(&mut cell_ui, cell_index, data_source);

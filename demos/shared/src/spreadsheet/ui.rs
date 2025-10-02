@@ -186,7 +186,16 @@ impl EditableTableRenderer<SpreadsheetSource> for SpreadsheetEditor {
     }
 
     fn render_cell_editor(&self, ui: &mut Ui, cell_index: &CellIndex, state: &mut Self::ItemState, _original_item: &Self::Value, source: &mut SpreadsheetSource) {
-        if ui.text_edit_singleline(state).changed() {
+        let editor = ui.add(egui::TextEdit::singleline(state)
+            .min_size(ui.available_size())
+            .frame(false)
+        );
+
+        editor.request_focus();
+
+        if editor
+            .changed()
+        {
             // Note: here we attempt to use the value, regardless of if it's a valid formula, etc.
             //       this gives us a 'live-update' functionality.
             //       we could just do this once `on_edit_complete`, but then the spreadsheet wouldn't change as the user types
