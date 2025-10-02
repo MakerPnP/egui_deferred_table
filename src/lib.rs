@@ -7,7 +7,7 @@ use egui::{
 };
 use log::{info, trace};
 use std::marker::PhantomData;
-use std::ops::{Add, Range};
+use std::ops::{Add, Range, Sub};
 
 const SHOW_HEADER_CELL_BORDERS: bool = false;
 const SHOW_CELL_BORDERS: bool = false;
@@ -1030,14 +1030,15 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                                                 let mut editor_frame: Frame = EDITOR_FRAME;
                                                 editor_frame.fill = row_bg_color;
-                                                editor_frame.stroke = Stroke::new(0.0, row_bg_color);
+                                                editor_frame.stroke = Stroke::new(1.0, ui.style().visuals.window_stroke.color);
+                                                editor_frame.inner_margin = Margin::same(1);
 
                                                 egui::Window::new("")
                                                     .title_bar(false)
                                                     .id(cell_ui.id().with("cell_editor"))
                                                     .frame(editor_frame)
                                                     .constrain_to(cells_clip_rect)
-                                                    .fixed_pos(cell_rect.min)
+                                                    .fixed_pos(cell_rect.min.sub(Vec2::splat(2.0)))
                                                     .auto_sized()
                                                     .default_rect(cell_rect)
                                                     .min_size(cell_rect.size())
