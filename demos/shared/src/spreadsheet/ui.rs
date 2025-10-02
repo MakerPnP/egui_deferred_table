@@ -185,7 +185,12 @@ impl EditableTableRenderer<SpreadsheetSource> for SpreadsheetEditor {
         source.set_cell_value(&index, &state);
     }
 
-    fn render_cell_editor(&self, ui: &mut Ui, _cell_index: &CellIndex, state: &mut Self::ItemState, _original_item: &Self::Value, _source: &SpreadsheetSource) {
-        ui.text_edit_singleline(state);
+    fn render_cell_editor(&self, ui: &mut Ui, cell_index: &CellIndex, state: &mut Self::ItemState, _original_item: &Self::Value, source: &mut SpreadsheetSource) {
+        if ui.text_edit_singleline(state).changed() {
+            // Note: here we attempt to use the value, regardless of if it's a valid formula, etc.
+            //       this gives us a 'live-update' functionality.
+            //       we could just do this once `on_edit_complete`, but then the spreadsheet wouldn't change as the user types
+            source.set_cell_value(&cell_index, &state);
+        }
     }
 }

@@ -1852,7 +1852,7 @@ pub trait EditableTableRenderer<DataSource> {
     /// eventually update the datasource, e.g. via a message queue and/or in a background thread.
     fn on_edit_complete(
         &mut self,
-        index: CellIndex,
+        cell_index: CellIndex,
         state: Self::ItemState,
         original_item: Self::Value,
         source: &mut DataSource,
@@ -1867,7 +1867,7 @@ pub trait EditableTableRenderer<DataSource> {
         cell_index: &CellIndex,
         state: &mut Self::ItemState,
         original_item: &Self::Value,
-        source: &DataSource,
+        source: &mut DataSource,
     );
 }
 
@@ -1914,7 +1914,7 @@ impl<DataSource> EditableTableRenderer<DataSource> for NullEditor {
         cell_index: &CellIndex,
         state: &mut Self::ItemState,
         original_item: &Self::Value,
-        source: &DataSource,
+        source: &mut DataSource,
     ) {
         let (_, _, _, _, _) = (ui, cell_index, state, original_item, source);
         unreachable!()
