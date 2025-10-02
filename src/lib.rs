@@ -583,7 +583,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 };
 
                                 let inner_column_width = if matches!(cell_kind, CellKind::ColumnHeader) {
-                                    *state.column_widths.get(mapped_column_index).unwrap_or(&inner_cell_size.x)
+                                    state.column_widths[mapped_column_index]
                                 } else {
                                     inner_cell_size.x
                                 };
@@ -965,7 +965,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         }
                                     }
 
-                                    let inner_column_width = state.column_widths[visible_column_index];
+                                    let inner_column_width = state.column_widths[mapped_column_index];
                                     let outer_column_width = inner_column_width + outer_inner_difference.x;
 
                                     let cell_index = CellIndex {
