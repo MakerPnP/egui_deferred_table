@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
@@ -34,6 +35,7 @@ struct DeferredTableParameters<'a> {
     min_size: Vec2,
     column_parameters: Option<&'a Vec<AxisParameters>>,
     row_parameters: Option<&'a Vec<AxisParameters>>,
+    selectable_rows: bool,
 }
 
 impl<'a> Default for DeferredTableParameters<'a> {
@@ -46,6 +48,7 @@ impl<'a> Default for DeferredTableParameters<'a> {
             min_size: Vec2::new(400.0, 200.0),
             column_parameters: None,
             row_parameters: None,
+            selectable_rows: true,
         }
     }
 }
@@ -65,7 +68,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         self
     }
 
-    /// default: disabled
+    /// default: one-based headers
     pub fn zero_based_headers(mut self) -> Self {
         self.parameters.zero_based_headers = true;
         self
@@ -74,6 +77,18 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
     /// default: enabled
     pub fn one_based_headers(mut self) -> Self {
         self.parameters.zero_based_headers = false;
+        self
+    }
+
+    /// default: enabled,
+    pub fn selectable_rows(mut self) -> Self {
+        self.parameters.selectable_rows = true;
+        self
+    }
+
+    /// default: selectable-rows enabled
+    pub fn selectable_rows_disabled(mut self) -> Self {
+        self.parameters.selectable_rows = false;
         self
     }
 
@@ -842,14 +857,28 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                                 if let Some(label) = &label {
                                     //cell_ui.label(format!("{:?}", cell_ui.id()));
-                                    cell_ui.add({
-                                        let mut text = RichText::new(label);
+                                    let mut text = RichText::new(label);
 
-                                        if monospace {
-                                            text = text.monospace();
+                                    if monospace {
+                                        text = text.monospace();
+                                    }
+
+                                    if matches!(cell_kind, CellKind::RowHeader) && self.parameters.selectable_rows {
+                                        let was_selected = temp_state.row_selections.contains(&mapped_row_index);
+                                        if cell_ui.selectable_label(was_selected, text).clicked() {
+                                            let selected = !was_selected;
+                                            match selected {
+                                                true => { temp_state.row_selections.insert(mapped_row_index); },
+                                                false => { temp_state.row_selections.remove(&mapped_row_index); },
+                                            }
                                         }
-                                        egui::Label::new(text).selectable(false)
-                                    });
+                                    } else {
+                                        cell_ui.add({
+
+
+                                            egui::Label::new(text).selectable(false)
+                                        });
+                                    }
                                 }
 
                                 if !matches!(cell_kind, CellKind::Corner) {
@@ -1411,6 +1440,10 @@ struct DeferredTableTempState {
 
     drag_state: Option<DragState>,
     last_viewport_rect: Option<Rect>,
+
+    // the collection here needs to a have a fast lookup, slow insertion/removal is fine.
+    // this is because we render frames often and insert/remove infrequently.
+    row_selections: BTreeSet<usize>,
 }
 
 #[derive(Clone, Copy)]
