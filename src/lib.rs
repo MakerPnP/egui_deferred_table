@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
@@ -7,6 +6,7 @@ use egui::{
     UiBuilder, UiKind, UiStackInfo, Vec2,
 };
 use log::{info, trace};
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::ops::{Add, Range, Sub};
 
@@ -205,6 +205,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         } else {
             style.visuals.panel_fill.add(style.visuals.faint_bg_color)
         };
+
+        let opaque_faint_selected_bg_color = style.visuals.selection.bg_fill.gamma_multiply(0.8);
 
         // we need to use `any_down`, since DRAGGING doesn't count as a click in `Response::clicked_elsewhere()`
         let (pointer_interact_pos, any_down) = ctx.input(|i| {
@@ -554,7 +556,13 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                             }
                             row_counter += 1;
 
-                            let row_bg_color = striped_row_color(row_counter, opaque_faint_bg_color).unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill);
+                            let row_was_selected = if matches!(row_kind, RowKind::ValuesRow) && self.parameters.selectable_rows {
+                                temp_state.row_selections.contains(&mapped_row_index)
+                            } else {
+                                false
+                            };
+
+                            let row_bg_color = Self::pick_row_bg_color(opaque_faint_bg_color, opaque_faint_selected_bg_color, ui, row_counter, row_was_selected);
 
                             let inner_row_height = match row_kind {
                                 RowKind::ValuesRow => *state.row_heights.get(mapped_row_index).unwrap_or(&inner_cell_size.y),
@@ -863,21 +871,21 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         text = text.monospace();
                                     }
 
-                                    if matches!(cell_kind, CellKind::RowHeader) && self.parameters.selectable_rows {
-                                        let was_selected = temp_state.row_selections.contains(&mapped_row_index);
-                                        if cell_ui.selectable_label(was_selected, text).clicked() {
-                                            let selected = !was_selected;
-                                            match selected {
-                                                true => { temp_state.row_selections.insert(mapped_row_index); },
-                                                false => { temp_state.row_selections.remove(&mapped_row_index); },
+                                    cell_ui.add({
+                                        egui::Label::new(text).selectable(false)
+                                    });
+                                }
+
+                                if response.clicked() {
+                                    match cell_kind {
+                                        CellKind::RowHeader => {
+                                            match row_was_selected {
+                                                true => { temp_state.row_selections.remove(&mapped_row_index); },
+                                                false => { temp_state.row_selections.insert(mapped_row_index); },
                                             }
                                         }
-                                    } else {
-                                        cell_ui.add({
-
-
-                                            egui::Label::new(text).selectable(false)
-                                        });
+                                        // TODO selectable columns?
+                                        _ => {}
                                     }
                                 }
 
@@ -972,7 +980,13 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 let inner_row_height = state.row_heights[mapped_row_index];
                                 let outer_row_height = inner_row_height + outer_inner_difference.y;
 
-                                let row_bg_color = striped_row_color(row_counter, opaque_faint_bg_color).unwrap_or(ui.style().visuals.panel_fill);
+                                let row_was_selected = if self.parameters.selectable_rows {
+                                    temp_state.row_selections.contains(&mapped_row_index)
+                                } else {
+                                    false
+                                };
+
+                                let row_bg_color = Self::pick_row_bg_color(opaque_faint_bg_color, opaque_faint_selected_bg_color, ui, row_counter, row_was_selected);
 
                                 let y = start_pos.y + accumulated_row_heights;
 
@@ -1175,6 +1189,22 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         DeferredTableTempState::store(ui.ctx(), temp_state_id, temp_state);
 
         (ui.response(), actions)
+    }
+
+    fn pick_row_bg_color(
+        opaque_faint_bg_color: Color32,
+        opaque_faint_selected_bg_color: Color32,
+        ui: &mut Ui,
+        mut row_counter: usize,
+        row_was_selected: bool,
+    ) -> Color32 {
+        if row_was_selected {
+            striped_row_color(row_counter, opaque_faint_selected_bg_color)
+                .unwrap_or(ui.style().visuals.selection.bg_fill)
+        } else {
+            striped_row_color(row_counter, opaque_faint_bg_color)
+                .unwrap_or(ui.style().visuals.widgets.noninteractive.weak_bg_fill)
+        }
     }
 
     fn paint_resize_handle(
