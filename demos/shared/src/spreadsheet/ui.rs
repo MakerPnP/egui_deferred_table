@@ -79,6 +79,7 @@ impl SpreadsheetState {
             .column_parameters(column_params)
             .row_parameters(row_params)
             .highlight_hovered_cell()
+            .selectable_rows_disabled()
             .show_and_edit(ui, &mut self.data_source, &mut self.renderer, &mut self.editor, &mut self.edit_state)
     }
 }
@@ -122,6 +123,11 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SpreadsheetState) {
                 // we actually want to MOVE the column data itself, not re-order the columns
                 state.data_source.move_row(from, to);
                 state.value.take();
+            }
+            Action::RowSelectionChanged { selection } => {
+                let _ = selection;
+                // row selection currently disabled
+                unreachable!()
             }
         }
     }

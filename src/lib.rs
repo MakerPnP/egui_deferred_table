@@ -234,6 +234,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let minimum_resize_size = (style.interaction.resize_grab_radius_side * 2.0) + 2.0;
 
         let mut clear_drag_state = false;
+        let mut request_row_selection_changed_action = false;
 
         // TODO allow these to be overridden
         let default_column_parameters = AxisParameters::default();
@@ -879,9 +880,12 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 if response.clicked() {
                                     match cell_kind {
                                         CellKind::RowHeader => {
-                                            match row_was_selected {
-                                                true => { temp_state.row_selections.remove(&mapped_row_index); },
-                                                false => { temp_state.row_selections.insert(mapped_row_index); },
+                                            if self.parameters.selectable_rows {
+                                                match row_was_selected {
+                                                    true => { temp_state.row_selections.remove(&mapped_row_index); },
+                                                    false => { temp_state.row_selections.insert(mapped_row_index); },
+                                                }
+                                                request_row_selection_changed_action = true;
                                             }
                                         }
                                         // TODO selectable columns?
@@ -1169,6 +1173,19 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             temp_state.drag_state = None;
         }
 
+        if request_row_selection_changed_action {
+            let potentially_visible_selections = temp_state
+                .row_selections
+                .iter()
+                .filter(|&mapped_row_id| *mapped_row_id < dimensions.row_count)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+
+            actions.push(Action::RowSelectionChanged {
+                selection: potentially_visible_selections,
+            });
+        }
+
         let repaint = match drag_action.take() {
             None => false,
             Some(DragAction::SetWidth(index, new_width)) => {
@@ -1195,7 +1212,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         opaque_faint_bg_color: Color32,
         opaque_faint_selected_bg_color: Color32,
         ui: &mut Ui,
-        mut row_counter: usize,
+        row_counter: usize,
         row_was_selected: bool,
     ) -> Color32 {
         if row_was_selected {
@@ -1399,6 +1416,11 @@ pub enum Action {
     RowReorder {
         from: usize,
         to: usize,
+    },
+
+    /// Generated when the user selected or deselects one or more rows.
+    RowSelectionChanged {
+        selection: BTreeSet<usize>,
     },
 }
 

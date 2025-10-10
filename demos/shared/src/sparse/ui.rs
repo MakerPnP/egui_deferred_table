@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use crate::sparse::{CellKind, CellKindChoice, SparseMapRenderer, SparseMapSource, generate_data};
 use egui::{Response, Ui};
 use egui_deferred_table::{Action, DeferredTable, apply_reordering};
@@ -70,6 +71,8 @@ struct UiState {
 
     row_ordering_input: String,
     column_ordering_input: String,
+
+    row_selections: BTreeSet<usize>,
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
@@ -120,6 +123,9 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
                 // Update UI to reflect changes
                 state.ui_state.row_ordering_input =
                     list_to_string(state.renderer.row_ordering.as_mut().unwrap());
+            }
+            Action::RowSelectionChanged { selection } => {
+                state.ui_state.row_selections = selection;
             }
         }
     }
@@ -229,6 +235,14 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
                 );
             }
         });
+
+        ui.separator();
+
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.label("Row selections");
+            ui.label(format!("{:?}", state.ui_state.row_selections));
+        });
+
     });
 
     ui.horizontal(|ui| {
