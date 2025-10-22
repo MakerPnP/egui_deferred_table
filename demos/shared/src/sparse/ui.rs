@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
 use crate::sparse::{CellKind, CellKindChoice, SparseMapRenderer, SparseMapSource, generate_data};
 use egui::{Response, Ui};
 use egui_deferred_table::{Action, DeferredTable, apply_reordering};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
+use std::collections::BTreeSet;
 
 pub struct SparseTableState {
     data: SparseMapSource<CellKind>,
@@ -242,7 +242,6 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
             ui.label("Row selections");
             ui.label(format!("{:?}", state.ui_state.row_selections));
         });
-
     });
 
     ui.horizontal(|ui| {

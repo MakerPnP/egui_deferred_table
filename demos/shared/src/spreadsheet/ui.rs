@@ -1,6 +1,9 @@
 use crate::spreadsheet::{SpreadsheetRenderer, SpreadsheetSource};
 use egui::{Response, Ui};
-use egui_deferred_table::{Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource, EditableTableRenderer, EditorState};
+use egui_deferred_table::{
+    Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource,
+    EditableTableRenderer, EditorState,
+};
 use log::debug;
 
 pub struct SpreadsheetState {
@@ -80,7 +83,13 @@ impl SpreadsheetState {
             .row_parameters(row_params)
             .highlight_hovered_cell()
             .selectable_rows_disabled()
-            .show_and_edit(ui, &mut self.data_source, &mut self.renderer, &mut self.editor, &mut self.edit_state)
+            .show_and_edit(
+                ui,
+                &mut self.data_source,
+                &mut self.renderer,
+                &mut self.editor,
+                &mut self.edit_state,
+            )
     }
 }
 
@@ -180,28 +189,43 @@ impl EditableTableRenderer<SpreadsheetSource> for SpreadsheetEditor {
     type Value = String;
     type ItemState = String;
 
-    fn build_item_state(&self, cell_index: CellIndex, source: &mut SpreadsheetSource) -> Option<(Self::ItemState, Self::Value)> {
-
+    fn build_item_state(
+        &self,
+        cell_index: CellIndex,
+        source: &mut SpreadsheetSource,
+    ) -> Option<(Self::ItemState, Self::Value)> {
         let value = source.get_cell_value(cell_index).unwrap().to_editable();
 
         Some((value.clone(), value))
     }
 
-    fn on_edit_complete(&mut self, index: CellIndex, state: Self::ItemState, _original_item: Self::Value, source: &mut SpreadsheetSource) {
+    fn on_edit_complete(
+        &mut self,
+        index: CellIndex,
+        state: Self::ItemState,
+        _original_item: Self::Value,
+        source: &mut SpreadsheetSource,
+    ) {
         source.set_cell_value(&index, &state);
     }
 
-    fn render_cell_editor(&self, ui: &mut Ui, cell_index: &CellIndex, state: &mut Self::ItemState, _original_item: &Self::Value, source: &mut SpreadsheetSource) {
-        let editor = ui.add(egui::TextEdit::singleline(state)
-            .min_size(ui.available_size())
-            .frame(false)
+    fn render_cell_editor(
+        &self,
+        ui: &mut Ui,
+        cell_index: &CellIndex,
+        state: &mut Self::ItemState,
+        _original_item: &Self::Value,
+        source: &mut SpreadsheetSource,
+    ) {
+        let editor = ui.add(
+            egui::TextEdit::singleline(state)
+                .min_size(ui.available_size())
+                .frame(false),
         );
 
         editor.request_focus();
 
-        if editor
-            .changed()
-        {
+        if editor.changed() {
             // Note: here we attempt to use the value, regardless of if it's a valid formula, etc.
             //       this gives us a 'live-update' functionality.
             //       we could just do this once `on_edit_complete`, but then the spreadsheet wouldn't change as the user types
