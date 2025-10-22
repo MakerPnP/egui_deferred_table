@@ -118,6 +118,8 @@ For API migration details, see the git commit history and study the changes made
 ### 0.1.6 (unreleased)
 
 - [added] Row selection.  See `Action::RowSelectionChanged`.
+- [added] Edit-in-place API.  See `EditableTableRenderer` and `DeferredTable::show_and_edit`.
+- [changed] Updated spreadsheet example to have edit-in-place cells. 
 - [changed] Added a 'shrink' button to the 'growing' example; this allows us to see the behavior of deleting selected
   rows and see that newly added rows are not selected.
 - [fixed] incorrect table size when the data source dimensions were made smaller.
