@@ -447,6 +447,9 @@ fn contents_growing_table(ui: &mut Ui, context: &mut TabContext, state: &mut Gro
                 Level::Info,
                 format!("Cell clicked. cell: {:?}", cell_index),
             ),
+            Action::RowSelectionChanged { selection } => {
+                state.update_row_selection(selection);
+            }
             _ => {
                 // ignored
             }

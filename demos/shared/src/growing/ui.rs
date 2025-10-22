@@ -1,10 +1,22 @@
 use crate::growing::{CellState, CellValue, GrowingSource, GrowingSourceRenderer};
 use egui::{Response, Ui};
 use egui_deferred_table::{Action, DeferredTable};
+use std::collections::BTreeSet;
 
 pub struct GrowingTableState {
     data: GrowingSource<CellState<CellValue>>,
     renderer: GrowingSourceRenderer,
+    row_selection: BTreeSet<usize>,
+}
+
+impl GrowingTableState {
+    pub fn update_row_selection(&mut self, selection: BTreeSet<usize>) {
+        self.row_selection = selection;
+    }
+
+    pub fn selected_rows(&self) -> &BTreeSet<usize> {
+        &self.row_selection
+    }
 }
 
 impl Default for GrowingTableState {
@@ -12,6 +24,7 @@ impl Default for GrowingTableState {
         Self {
             data: GrowingSource::default(),
             renderer: GrowingSourceRenderer::default(),
+            row_selection: BTreeSet::new(),
         }
     }
 }
@@ -39,6 +52,22 @@ pub fn show_controls(ui: &mut Ui, state: &mut GrowingTableState) {
             if ui.button("shrink").clicked() {
                 state.data.shrink(1, 1);
             }
+
+            ui.separator();
+            let selected_rows = state.selected_rows();
+            let message = if selected_rows.is_empty() {
+                "None".to_string()
+            } else {
+                format!(
+                    "{}",
+                    selected_rows
+                        .iter()
+                        .map(|it| it.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            ui.label(format!("Selected rows: {}", message))
         });
     });
 }
