@@ -268,7 +268,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             // remove non-visible selections
             temp_state.row_selections.retain(|&mapped_row_id| {
                 let visible = mapped_row_id < dimensions.row_count;
-                
+
                 if !visible {
                     request_row_selection_changed_action = true;
                 }
@@ -400,13 +400,20 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             // pre-calculate to avoid doing the divide for every cell.
             let outer_inner_half_difference = outer_inner_difference / 2.0;
 
-            // add the width/height of the column/row headers to the sum of the column widths/row heights, respectively.
-            let total_content_width = state.column_widths.iter().sum::<f32>() + ((outer_inner_difference.x + 1.0) * dimensions.column_count as f32) + outer_cell_size.x;
-            let total_content_height = state.row_heights.iter().sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
+            // add the width/height of the column/row headers to the sum of the column widths/row heights, respectively,
+            // while ignoring widths/heights that don't apply to the current dimensions.
+            let total_content_width = state.column_widths
+                .iter()
+                .take(dimensions.column_count)
+                .sum::<f32>() + ((outer_inner_difference.x + 1.0) * dimensions.column_count as f32) + outer_cell_size.x;
+            let total_content_height = state.row_heights
+                .iter()
+                .take(dimensions.row_count)
+                .sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
 
             let columns_to_filter = renderer.columns_to_filter();
             let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
-                columns.iter().map(|index| {
+                columns.iter().take(dimensions.column_count).map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
                     state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()
@@ -414,7 +421,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
             let rows_to_filter = renderer.rows_to_filter();
             let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
-                rows.iter().map(|index| {
+                rows.iter().take(dimensions.row_count).map(|index| {
                     let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
                     state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y + 1.0).unwrap_or(0.0)
                 }).sum::<f32>()

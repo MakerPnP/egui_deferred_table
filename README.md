@@ -120,6 +120,7 @@ For API migration details, see the git commit history and study the changes made
 - [added] Row selection.  See `Action::RowSelectionChanged`.
 - [changed] Added a 'shrink' button to the 'growing' example; this allows us to see the behavior of deleting selected
   rows and see that newly added rows are not selected.
+- [fixed] incorrect table size when the data source dimensions were made smaller.
 
 ### 0.1.5 (2025/09/21)
 
