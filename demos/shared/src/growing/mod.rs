@@ -297,11 +297,23 @@ impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>>
             CellState::Loading => {
                 ui.label("loading...");
             }
-            CellState::Busy(value) | CellState::Ready(value) => match value {
-                CellValue::String(s) => {
-                    ui.monospace(s);
-                }
-            },
+            CellState::Ready(value) => Self::render_value(ui, value),
+            CellState::Busy(value) => {
+                ui.horizontal(|ui| {
+                    ui.label("*");
+                    Self::render_value(ui, value);
+                });
+            }
+        }
+    }
+}
+
+impl GrowingSourceAlternativeRenderer {
+    fn render_value(ui: &mut Ui, value: &CellValue) {
+        match value {
+            CellValue::String(s) => {
+                ui.monospace(s);
+            }
         }
     }
 }
