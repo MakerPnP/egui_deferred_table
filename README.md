@@ -115,6 +115,10 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
+### 0.1.6 (unreleased)
+
+- [added] Row selection.  See `Action::RowSelectionChanged`.
+
 ### 0.1.5 (2025/09/21)
 
 - [changed] Remove the `DeferredTableBuilder` in favor of a solution that allows caching of the column parameters on an 
