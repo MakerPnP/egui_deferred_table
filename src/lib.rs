@@ -256,6 +256,19 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
         trace!("dimensions: {:?}", dimensions);
 
+        let dimensions_changed = temp_state
+            .dimensions
+            .map_or(true, |previous_frame_dimensions| {
+                previous_frame_dimensions != dimensions
+            });
+
+        if dimensions_changed {
+            temp_state.dimensions = Some(dimensions);
+
+            // remove non-visible selections
+            temp_state.row_selections.retain(|&mapped_row_id| mapped_row_id < dimensions.row_count);
+        }
+
         let parent_max_rect = ui.max_rect();
         let parent_clip_rect = ui.clip_rect();
         let ui_layer_id = ui.layer_id();
@@ -1174,15 +1187,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         }
 
         if request_row_selection_changed_action {
-            let potentially_visible_selections = temp_state
-                .row_selections
-                .iter()
-                .filter(|&mapped_row_id| *mapped_row_id < dimensions.row_count)
-                .cloned()
-                .collect::<BTreeSet<_>>();
-
             actions.push(Action::RowSelectionChanged {
-                selection: potentially_visible_selections,
+                selection: temp_state.row_selections.clone(),
             });
         }
 
@@ -1496,6 +1502,8 @@ struct DeferredTableTempState {
     // the collection here needs to a have a fast lookup, slow insertion/removal is fine.
     // this is because we render frames often and insert/remove infrequently.
     row_selections: BTreeSet<usize>,
+    /// holds the dimensions used on the last render.
+    dimensions: Option<TableDimensions>,
 }
 
 #[derive(Clone, Copy)]
