@@ -266,7 +266,14 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
             temp_state.dimensions = Some(dimensions);
 
             // remove non-visible selections
-            temp_state.row_selections.retain(|&mapped_row_id| mapped_row_id < dimensions.row_count);
+            temp_state.row_selections.retain(|&mapped_row_id| {
+                let visible = mapped_row_id < dimensions.row_count;
+                
+                if !visible {
+                    request_row_selection_changed_action = true;
+                }
+                visible
+            });
         }
 
         let parent_max_rect = ui.max_rect();
