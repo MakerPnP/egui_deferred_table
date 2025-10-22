@@ -36,6 +36,9 @@ pub fn show_controls(ui: &mut Ui, state: &mut GrowingTableState) {
             if ui.button("grow").clicked() {
                 state.data.grow(1, 1);
             }
+            if ui.button("shrink").clicked() {
+                state.data.shrink(1, 1);
+            }
         });
     });
 }

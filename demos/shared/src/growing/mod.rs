@@ -4,12 +4,14 @@ use egui_deferred_table::{
     CellIndex, DeferredTableDataSource, DeferredTableRenderer, TableDimensions,
 };
 use log::{debug, trace};
+use std::mem;
 
 pub mod ui;
 
 pub enum CellState<T> {
     Loading,
     Ready(T),
+    Busy(T),
 }
 
 impl<T> Default for CellState<T> {
@@ -24,12 +26,19 @@ pub enum CellValue {
 
 pub struct GrowingSource<T> {
     last_accessed_at: DateTime<Local>,
-    pending_operations: Vec<(DateTime<Local>, Operations)>,
+    pending_operations: Vec<(DateTime<Local>, Operation)>,
     data: Vec<Vec<T>>,
 }
 
-enum Operations {
-    Grow,
+enum Operation {
+    Grow {
+        row_count: usize,
+        column_count: usize,
+    },
+    Shrink {
+        row_count: usize,
+        column_count: usize,
+    },
 }
 
 impl<T> GrowingSource<T> {
@@ -44,6 +53,10 @@ impl<T> GrowingSource<T> {
 impl<V> GrowingSource<CellState<V>> {
     /// grow the source by rows/columns
     pub fn grow(&mut self, row_count: usize, column_count: usize) {
+        // this implementation can't grow if there are pending operations
+        if !self.pending_operations.is_empty() {
+            return;
+        }
         let (existing_rows, existing_columns) = self.dimensions();
         let (total_rows, total_columns) =
             (existing_rows + row_count, existing_columns + column_count);
@@ -66,9 +79,49 @@ impl<V> GrowingSource<CellState<V>> {
             }
         }
 
-        self.pending_operations
-            .push((Local::now(), Operations::Grow));
+        self.pending_operations.push((
+            Local::now(),
+            Operation::Grow {
+                row_count,
+                column_count,
+            },
+        ));
         // here you could trigger a 'load' on another thread
+    }
+
+    /// shrink the source by rows/columns
+    pub fn shrink(&mut self, row_count: usize, column_count: usize) {
+        // this implementation can't shrink if there are pending operations
+        if !self.pending_operations.is_empty() {
+            return;
+        }
+        let (existing_rows, existing_columns) = self.dimensions();
+
+        for row_index in 0..existing_rows {
+            let columns_to_remove = if row_index >= existing_rows - row_count {
+                existing_columns
+            } else {
+                column_count
+            };
+
+            let row = &mut self.data[row_index];
+            for cell in row.iter_mut().skip(existing_columns - columns_to_remove) {
+                let taken = mem::take(cell);
+                match taken {
+                    CellState::Ready(value) => *cell = CellState::Busy(value),
+                    _ => *cell = taken,
+                }
+            }
+        }
+
+        self.pending_operations.push((
+            Local::now(),
+            Operation::Shrink {
+                row_count,
+                column_count,
+            },
+        ));
+        // here you could trigger an operation, such as deleting, on another thread
     }
 }
 
@@ -110,7 +163,12 @@ impl GrowingSource<CellState<CellValue>> {
             pending_operations
                 .into_iter()
                 .partition(|(time, operation)| match operation {
-                    Operations::Grow => now.signed_duration_since(time).num_milliseconds() > 500,
+                    Operation::Grow { .. } => {
+                        now.signed_duration_since(time).num_milliseconds() > 500
+                    }
+                    Operation::Shrink { .. } => {
+                        now.signed_duration_since(time).num_milliseconds() > 1000
+                    }
                 });
 
         // Restore operations to keep
@@ -119,14 +177,23 @@ impl GrowingSource<CellState<CellValue>> {
         // Process the operations
         for (_, operation) in to_process {
             match operation {
-                Operations::Grow => {
-                    self.simulate_background_loading();
+                Operation::Grow {
+                    row_count,
+                    column_count,
+                } => {
+                    self.simulate_background_loading(row_count, column_count);
+                }
+                Operation::Shrink {
+                    row_count,
+                    column_count,
+                } => {
+                    self.simulate_background_deletion(row_count, column_count);
                 }
             }
         }
     }
 
-    fn simulate_background_loading(&mut self) {
+    fn simulate_background_loading(&mut self, _row_count: usize, _column_count: usize) {
         // fill-in random data in all cells with `Loading` state
 
         let (rows, _columns) = self.dimensions();
@@ -134,6 +201,20 @@ impl GrowingSource<CellState<CellValue>> {
         for row in self.data.iter_mut().take(rows) {
             for value in row.iter_mut().filter(|it| matches!(it, CellState::Loading)) {
                 *value = CellState::Ready(CellValue::String("test".to_string()));
+            }
+        }
+    }
+
+    fn simulate_background_deletion(&mut self, row_count: usize, column_count: usize) {
+        let (rows, columns) = self.dimensions();
+
+        if rows >= row_count {
+            // this dummy implementation ignores the 'busy' state and just truncates rows/columns regardless
+            self.data.truncate(rows - row_count);
+        }
+        for row in self.data.iter_mut() {
+            if columns >= column_count {
+                row.truncate(columns - column_count);
             }
         }
     }
@@ -184,6 +265,14 @@ impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>> for GrowingSourc
                     ui.label(s);
                 }
             },
+            CellState::Busy(value) => match value {
+                CellValue::String(s) => {
+                    ui.horizontal(|ui| {
+                        ui.label(s);
+                        ui.spinner();
+                    });
+                }
+            },
         }
     }
 }
@@ -208,7 +297,7 @@ impl DeferredTableRenderer<GrowingSource<CellState<CellValue>>>
             CellState::Loading => {
                 ui.label("loading...");
             }
-            CellState::Ready(value) => match value {
+            CellState::Busy(value) | CellState::Ready(value) => match value {
                 CellValue::String(s) => {
                     ui.monospace(s);
                 }
