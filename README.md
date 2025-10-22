@@ -115,7 +115,7 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
-### 0.1.6 (unreleased)
+### 0.1.6 (2025/10/22)
 
 - [added] Row selection.  See `Action::RowSelectionChanged`.
 - [added] Edit-in-place API.  See `EditableTableRenderer` and `DeferredTable::show_and_edit`.
