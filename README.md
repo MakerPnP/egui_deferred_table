@@ -74,6 +74,7 @@ of table data.
 | Column re-ordering          | ✅ Working           |
 | Row re-ordering             | ✅ Working           |
 | Column/Row re-size handles  | ✅ Working           |
+| Auto-expanding columns      | ✅ Working           |
 | Sorting UI                  | 🚧 Not-started (*1) |
 | Filtering UI                | 🚧 Not-started (*2) |
 
@@ -115,7 +116,7 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
-### unreleased
+### 0.1.7 (2025/11/14)
 
 - [added] Allow marked columns to expand to fill the remaining space.
 - [changed] Update to egui 0.33.0, also updated other dependencies.
