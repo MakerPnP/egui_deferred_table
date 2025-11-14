@@ -2,11 +2,14 @@ extern crate core;
 
 use chrono::{DateTime, Local};
 use egui::{Ui, ViewportBuilder, WidgetText};
-use egui_deferred_table::{Action, AxisParameters, DeferredTable, SimpleTupleRenderer};
+use egui_deferred_table::{
+    Action, AxisParameters, CellIndex, DeferredTable, DeferredTableRenderer, SimpleTupleRenderer,
+    apply_reordering,
+};
 use egui_dock::{DockArea, DockState, NodeIndex};
 use log::Level;
 use shared::data::futurama;
-use shared::data::futurama::RowType;
+use shared::data::futurama::{RowType, format_value};
 use shared::growing::ui::GrowingTableState;
 use shared::sparse::ui::SparseTableState;
 use shared::spreadsheet::ui::SpreadsheetState;
@@ -83,9 +86,9 @@ impl Default for MyApp {
             }],
         );
         let _ = tree.add_window(vec![Tab {
-            name: "Simple (initially floating)",
+            name: "Advanced (initially floating)",
             kind: TabKind::SimpleTable {
-                state: SimpleTableState::default(),
+                state: AdvancedTableState::default(),
             },
         }]);
 
@@ -160,7 +163,7 @@ struct Tab {
 
 enum TabKind {
     TableInsideScrollArea { state: InsideScrollAreaState },
-    SimpleTable { state: SimpleTableState },
+    SimpleTable { state: AdvancedTableState },
     Spreadsheet { state: SpreadsheetState },
     SparseTable { state: SparseTableState },
     GrowingTable { state: GrowingTableState },
@@ -174,7 +177,7 @@ impl TabKind {
                 contents_inside_scroll_area(ui, context, state);
             }
             TabKind::SimpleTable { state } => {
-                contents_simple_table(ui, context, state);
+                contents_advanced_table(ui, context, state);
             }
             TabKind::Spreadsheet { state } => {
                 contents_spreadsheet(ui, context, state);
@@ -265,12 +268,19 @@ pub struct InsideScrollAreaState {
     renderer: SimpleTupleRenderer,
 }
 
-fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut SimpleTableState) {
+fn contents_advanced_table(ui: &mut Ui, context: &mut TabContext, state: &mut AdvancedTableState) {
+    ui.label("Try dragging the column and rows headers to reorder them.");
+    ui.label("Some columns are expandable, try resizing the window.");
+    ui.label("Some columns are resizable, try resizing them.");
+
+    ui.separator();
+
     struct Params {
         default_width: f32,
         maximum_width: f32,
         minimum_width: f32,
         resizable: bool,
+        expandable: bool,
     }
 
     const FIELD_PARAMS: [Params; 8] = [
@@ -279,48 +289,57 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
             maximum_width: 400.0,
             minimum_width: 50.0,
             resizable: true,
+            expandable: false,
         },
         Params {
             default_width: 80.0,
             maximum_width: 0.0,
             minimum_width: 0.0,
             resizable: false,
+            expandable: false,
         },
         Params {
             default_width: 100.0,
             maximum_width: 400.0,
             minimum_width: 50.0,
             resizable: true,
+            expandable: false,
         },
         Params {
             default_width: 400.0,
             maximum_width: f32::INFINITY,
             minimum_width: 50.0,
             resizable: true,
+            expandable: true,
         },
         Params {
             default_width: 125.0,
             maximum_width: 400.0,
             minimum_width: 50.0,
             resizable: true,
+            expandable: false,
         },
         Params {
             default_width: 100.0,
             maximum_width: 200.0,
             minimum_width: 25.0,
             resizable: true,
+            expandable: false,
         },
         Params {
             default_width: 100.0,
             maximum_width: 200.0,
             minimum_width: 25.0,
             resizable: true,
+            expandable: false,
         },
         Params {
             default_width: 80.0,
             maximum_width: 200.0,
             minimum_width: 25.0,
             resizable: true,
+            // NOTE: this specifically goes against the advice regarding multiple expandable columns, so the behaviour can be observed in this demo.
+            expandable: true,
         },
     ];
     let mut data_source = context.data.as_slice();
@@ -335,12 +354,13 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
                 .default_dimension(field_params.default_width)
                 .minimum_dimension(field_params.minimum_width)
                 .maximum_dimension(field_params.maximum_width)
+                .expandable(field_params.expandable)
         })
         .collect::<Vec<_>>();
 
     let (_response, actions) = DeferredTable::new(ui.make_persistent_id("table_1"))
         .column_parameters(&column_params)
-        .show(ui, &mut data_source, &mut _state.renderer);
+        .show(ui, &mut data_source, &mut state.renderer);
 
     for action in actions {
         match action {
@@ -349,6 +369,12 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
                 Level::Info,
                 format!("Cell clicked. cell: {:?}", cell_index),
             ),
+            Action::ColumnReorder { from, to } => {
+                apply_reordering(&mut state.renderer.column_ordering, from, to);
+            }
+            Action::RowReorder { from, to } => {
+                apply_reordering(&mut state.renderer.row_ordering, from, to);
+            }
             _ => {
                 // ignored
             }
@@ -357,9 +383,29 @@ fn contents_simple_table(ui: &mut Ui, context: &mut TabContext, _state: &mut Sim
 }
 
 #[derive(Default)]
-pub struct SimpleTableState {
-    // here we could add state for table properties/presentation/etc.
-    renderer: SimpleTupleRenderer,
+pub struct AdvancedTableState {
+    renderer: AdvancedTableRenderer,
+}
+
+/// Supports row and column reordering, no persistence between application restart.
+#[derive(Default)]
+struct AdvancedTableRenderer {
+    row_ordering: Option<Vec<usize>>,
+    column_ordering: Option<Vec<usize>>,
+}
+
+impl DeferredTableRenderer<&[RowType]> for AdvancedTableRenderer {
+    fn render_cell(&self, ui: &mut Ui, cell_index: CellIndex, source: &&[RowType]) {
+        ui.label(format_value(&source[cell_index.row], cell_index.column));
+    }
+
+    fn row_ordering(&self) -> Option<&[usize]> {
+        self.row_ordering.as_ref().map(|v| v.as_slice())
+    }
+
+    fn column_ordering(&self) -> Option<&[usize]> {
+        self.column_ordering.as_ref().map(|v| v.as_slice())
+    }
 }
 
 fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
@@ -374,6 +420,7 @@ fn contents_log(ui: &mut Ui, context: &mut TabContext, _state: &mut LogState) {
             .default_dimension(100.0),
         AxisParameters::default()
             .name("Message".to_string())
+            .expandable(true)
             .default_dimension(400.0),
     ];
 

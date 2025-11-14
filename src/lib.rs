@@ -422,7 +422,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                 }).sum::<f32>()
             });
 
-            let total_content_size = Vec2::new(
+            let mut total_content_size = Vec2::new(
                 total_content_width - filtered_content_width,
                 total_content_height - filtered_content_height,
             );
@@ -447,6 +447,18 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                     ui.painter().debug_rect(table_max_rect, Color32::MAGENTA, "tmr");
                 }
 
+                let available_space = ui.max_rect();
+                let available_width = available_space.width() - (scroll_style.bar_width + scroll_style.bar_outer_margin + scroll_style.bar_inner_margin);
+
+                // when laying out columns, we can add a portion of this to any expandable columns.
+                let additional_width = if total_content_size.x < available_width {
+                    available_width - total_content_size.x
+                } else {
+                    0.0
+                };
+
+                total_content_size.x += additional_width;
+
                 egui::ScrollArea::both()
                     .id_salt("table_scroll_area")
                     .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
@@ -468,6 +480,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                         ui.set_height(total_content_size.y);
                         ui.set_width(total_content_size.x);
+
+                        //ui.ctx().debug_painter().debug_rect(ui.max_rect(), Color32::RED, "mr");
 
                         fn range_and_index_for_offset(offset: f32, values: &[f32], map: &[usize], filter: &Option<&[usize]>, sizing: f32) -> Result<(Range<f32>, usize, usize, usize), ()> {
                             let mut visible_index = 0;
@@ -595,6 +609,9 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                             let mut accumulated_column_widths = 0.0;
 
+                            // Prevent applying expansion twice.
+                            let mut expansion_applied = false;
+
                             for grid_column_index in 0..=visible_column_count {
                                 if grid_column_index + cell_origin.column > dimensions.column_count {
                                     break
@@ -629,10 +646,23 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 };
 
                                 let inner_column_width = if matches!(cell_kind, CellKind::ColumnHeader) {
-                                    state.column_widths[mapped_column_index]
+                                    let mut width = state.column_widths[mapped_column_index];
+                                    if !expansion_applied {
+                                        if let Some(column_parameters) = self.parameters.column_parameters {
+                                            match column_parameters.get(mapped_column_index) {
+                                                Some(params) if params.expandable => {
+                                                    expansion_applied = true;
+                                                    width += additional_width
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                    width
                                 } else {
                                     inner_cell_size.x
                                 };
+
                                 let outer_column_width = inner_column_width + outer_inner_difference.x;
 
                                 let mut y = start_pos.y + accumulated_row_heights;
@@ -722,6 +752,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         ui.interact(resize_interact_rect, column_resize_id, egui::Sense::click_and_drag());
 
                                     let mut drag_handle_state = if resize_response.hovered() {
+                                        // if !column_parameters.resizable || column_parameters.expandable {
                                         if !column_parameters.resizable {
                                             DragHandleState::Disabled
                                         } else {
@@ -731,6 +762,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         DragHandleState::Inactive
                                     };
 
+                                    // if column_parameters.resizable && !column_parameters.expandable {
                                     if column_parameters.resizable {
                                         if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
                                             temp_state.drag_state = pointer_pos.map(|start_pos| DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
@@ -1034,7 +1066,18 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         }
                                     }
 
-                                    let inner_column_width = state.column_widths[mapped_column_index];
+                                    let inner_column_width = {
+                                        let mut width = state.column_widths[mapped_column_index];
+                                        if let Some(column_parameters) = self.parameters.column_parameters {
+                                            match column_parameters.get(mapped_column_index) {
+                                                Some(params) if params.expandable => {
+                                                    width += additional_width
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        width
+                                    };
                                     let outer_column_width = inner_column_width + outer_inner_difference.x;
 
                                     let cell_index = CellIndex {

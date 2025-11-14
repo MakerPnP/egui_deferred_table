@@ -16,6 +16,7 @@ pub struct AxisParameters {
     pub dimension_range: Rangef,
     pub resizable: bool,
     pub monospace: bool,
+    pub expandable: bool,
 }
 
 impl Default for AxisParameters {
@@ -26,6 +27,7 @@ impl Default for AxisParameters {
             dimension_range: Rangef::new(10.0, f32::INFINITY),
             resizable: true,
             monospace: false,
+            expandable: false,
         }
     }
 }
@@ -71,6 +73,18 @@ impl AxisParameters {
         self.monospace = value;
         self
     }
+
+    /// indicates if this column can be expanded to fill the available space
+    /// does NOT imply the USER can resize it
+    ///
+    /// If there are multiple expandable columns then only the first one encountered will be expanded.
+    /// Thus, it's not advisable to set it on more than one column, especially if you are using column reordering.
+    ///
+    /// Currently not applicable to rows.
+    pub fn expandable(mut self, value: bool) -> Self {
+        self.expandable = value;
+        self
+    }
 }
 
 pub(crate) struct DeferredTableParameters<'a> {
@@ -78,7 +92,9 @@ pub(crate) struct DeferredTableParameters<'a> {
     pub(crate) zero_based_headers: bool,
     pub(crate) highlight_hovered_cell: bool,
     pub(crate) min_size: Vec2,
+    /// Can contain fewer entries than the number of columns. Default axis parameters are used for the remaining columns.
     pub(crate) column_parameters: Option<&'a Vec<AxisParameters>>,
+    /// Can contain fewer entries than the number of rows. Default axis parameters are used for the remaining rows.
     pub(crate) row_parameters: Option<&'a Vec<AxisParameters>>,
     pub(crate) selectable_rows: bool,
 }

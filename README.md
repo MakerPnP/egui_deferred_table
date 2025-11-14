@@ -115,6 +115,10 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
+### unreleased
+
+- [added] Allow marked columns to expand to fill the remaining space.
+
 ### 0.1.6 (2025/10/22)
 
 - [added] Row selection.  See `Action::RowSelectionChanged`.
