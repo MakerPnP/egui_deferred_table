@@ -118,6 +118,7 @@ For API migration details, see the git commit history and study the changes made
 ### unreleased
 
 - [added] Allow marked columns to expand to fill the remaining space.
+- [changed] Update to egui 0.33.0, also updated other dependencies.
 
 ### 0.1.6 (2025/10/22)
 
