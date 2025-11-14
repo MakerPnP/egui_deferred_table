@@ -218,7 +218,6 @@ name = "egui_deferred_table"
 version = "0.1.6"
 dependencies = [
  "egui",
- "indexmap",
  "log",
 ]
 
