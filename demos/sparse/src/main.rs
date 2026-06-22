@@ -34,20 +34,21 @@ impl Default for MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top_panel").show_inside(ui, |ui| {
             self.top_panel_content(ui);
         });
 
-        egui::SidePanel::left("left_panel").show(ctx, |ui| {
+        egui::Panel::left("left_panel").show_inside(ui, |ui| {
             self.left_panel_content(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             self.central_panel_content(ui);
         });
 
         // Inspection window
+        let ctx = ui.ctx();
         egui::Window::new("🔍 Inspection")
             .open(&mut self.inspection)
             .vscroll(true)

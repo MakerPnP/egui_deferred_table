@@ -116,6 +116,10 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
+### 0.2.0 (2026/06/22)
+
+- [changed] Update to egui 0.34.0, also updated other dependencies.
+
 ### 0.1.7 (2025/11/14)
 
 - [added] Allow marked columns to expand to fill the remaining space.

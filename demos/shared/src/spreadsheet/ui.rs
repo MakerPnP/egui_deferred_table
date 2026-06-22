@@ -1,5 +1,5 @@
 use crate::spreadsheet::{SpreadsheetRenderer, SpreadsheetSource};
-use egui::{Response, Ui};
+use egui::{Frame, Response, Ui};
 use egui_deferred_table::{
     Action, AxisParameters, CellIndex, DeferredTable, DeferredTableDataSource,
     EditableTableRenderer, EditorState,
@@ -220,7 +220,7 @@ impl EditableTableRenderer<SpreadsheetSource> for SpreadsheetEditor {
         let editor = ui.add(
             egui::TextEdit::singleline(state)
                 .min_size(ui.available_size())
-                .frame(false),
+                .frame(Frame::NONE),
         );
 
         editor.request_focus();

@@ -1,6 +1,6 @@
 [package]
 name = "egui_deferred_table"
-version = "0.1.7"
+version = "0.2.0"
 edition = "2024"
 documentation = "https://docs.rs/egui_deferred_table"
 repository = "https://github.com/MakerPnP/egui_deferred_table"
@@ -23,7 +23,7 @@ include = [
 ]
 
 [dependencies]
-egui = { version = "0.33.0" }
+egui = { version = "0.34.0" }
 log = "0.4.27"
 serde = { version = "1.0.219", optional = true, features = ["derive"] }
 
