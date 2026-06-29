@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 egui_deferred_table = { path = "../.." }
 
-egui = "0.34.0"
+egui = "0.35.0"
 
 # time/date
 chrono = "0.4.41"
