@@ -11,6 +11,10 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
+## 0.4.0
+
+- [changed] Update to egui 0.36.0.
+
 ## 0.3.0 (2026/06/29)
 
 - [changed] Update to egui 0.35.0.

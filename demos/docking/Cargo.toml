@@ -7,9 +7,9 @@ edition = "2024"
 egui_deferred_table = { path = "../.." }
 shared = { path = "../shared" }
 
-egui = { version = "0.35.0" }
-eframe = { version = "0.35.0"}
-egui_dock = "0.20.1"
+egui = { version = "0.36.0" }
+eframe = { version = "0.36.0"}
+egui_dock = "0.21.0"
 
 # time/date
 chrono = "0.4.41"

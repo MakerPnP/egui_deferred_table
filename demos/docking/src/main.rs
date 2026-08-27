@@ -1,7 +1,7 @@
 extern crate core;
 
 use chrono::{DateTime, Local};
-use egui::{Ui, ViewportBuilder, WidgetText};
+use egui::{Id, Ui, ViewportBuilder, WidgetText};
 use egui_deferred_table::{
     Action, AxisParameters, CellIndex, DeferredTable, DeferredTableRenderer, SimpleTupleRenderer,
     apply_reordering,
@@ -202,6 +202,10 @@ struct TabViewer<'a> {
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     type Tab = Tab;
+
+    fn id(&mut self, tab: &mut Self::Tab) -> Id {
+        Id::new(self.title(tab).text())
+    }
 
     fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
         (&*tab.name).into()
