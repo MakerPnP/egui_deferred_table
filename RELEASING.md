@@ -34,5 +34,5 @@ Publish:
 
 <!-- Badges -->
 
-[build-status]: https://github.com/makerpnp/egui_deferred_table/actions/workflows/ci.yml
+[build-status]: https://github.com/makerpnp/egui_deferred_table/actions/workflows/rust.yml
 [build-status-badge]: https://github.com/makerpnp/egui_deferred_table/workflows/CI/badge.svg
