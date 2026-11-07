@@ -410,20 +410,10 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                 .sum::<f32>() + ((outer_inner_difference.y + 1.0) * dimensions.row_count as f32) + outer_cell_size.y;
 
             let columns_to_filter = renderer.columns_to_filter();
-            let filtered_content_width = columns_to_filter.map_or(0.0,|columns|{
-                columns.iter().take(dimensions.column_count).map(|index| {
-                    let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.column_widths.get(mapped_index).map(|it|it + outer_inner_difference.x + 1.0).unwrap_or(0.0)
-                }).sum::<f32>()
-            });
+            let filtered_content_width = filtered_size(&state.column_widths, dimensions.column_count, columns_to_filter, outer_inner_difference.x + 1.0);
 
             let rows_to_filter = renderer.rows_to_filter();
-            let filtered_content_height = rows_to_filter.map_or(0.0,|rows|{
-                rows.iter().take(dimensions.row_count).map(|index| {
-                    let mapped_index = Self::map_index(dimensions.column_count, column_ordering, *index);
-                    state.row_heights.get(mapped_index).map(|it|it + outer_inner_difference.y + 1.0).unwrap_or(0.0)
-                }).sum::<f32>()
-            });
+            let filtered_content_height = filtered_size(&state.row_heights, dimensions.row_count, rows_to_filter, outer_inner_difference.y + 1.0);
 
             let mut total_content_size = Vec2::new(
                 total_content_width - filtered_content_width,
@@ -1435,6 +1425,23 @@ fn striped_row_color(row: usize, striped_color: Color32) -> Option<Color32> {
     }
 }
 
+/// The total size of the columns or rows that are filtered out, each with its `sizing` added.
+///
+/// `filter` holds data indexes, not visible ones, as the filter applies after the ordering, so they're not mapped.  An
+/// index outside `count`, or given more than once, is filtered out once, or not at all.
+fn filtered_size(sizes: &[f32], count: usize, filter: Option<&[usize]>, sizing: f32) -> f32 {
+    let Some(filter) = filter else { return 0.0 };
+
+    filter
+        .iter()
+        .copied()
+        .filter(|&index| index < count)
+        .collect::<BTreeSet<usize>>()
+        .into_iter()
+        .map(|index| sizes.get(index).map(|size| size + sizing).unwrap_or(0.0))
+        .sum()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum DragHandleState {
     Disabled,
@@ -1513,5 +1520,34 @@ impl DeferredTableTempState {
 
     pub fn store(ctx: &Context, id: Id, instance: Self) {
         ctx.data_mut(|d| d.insert_temp(id, instance));
+    }
+}
+
+#[cfg(test)]
+mod filtered_size_tests {
+    use crate::filtered_size;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::no_filter(None, 0.0)]
+    #[case::empty_filter(Some(vec![]), 0.0)]
+    #[case::one_row(Some(vec![1]), 21.0)]
+    // the indexes are data indexes, so a row ordering doesn't change them, and they're not limited by their position
+    // in the filter, so the last of more filter indexes than rows still counts.
+    #[case::rows_out_of_order(Some(vec![3, 0]), 11.0 + 41.0)]
+    #[case::more_indexes_than_rows(Some(vec![5, 6, 7, 8, 3]), 41.0)]
+    #[case::an_index_outside_the_rows(Some(vec![4, 0]), 11.0)]
+    #[case::an_index_given_twice(Some(vec![2, 2]), 31.0)]
+    fn test_filtered_size(#[case] filter: Option<Vec<usize>>, #[case] expected: f32) {
+        // given
+        // a 5th size, as the sizes aren't truncated when the count drops.
+        let sizes = [10.0, 20.0, 30.0, 40.0, 50.0];
+        let count = 4;
+
+        // when
+        let size = filtered_size(&sizes, count, filter.as_deref(), 1.0);
+
+        // then
+        assert_eq!(size, expected);
     }
 }

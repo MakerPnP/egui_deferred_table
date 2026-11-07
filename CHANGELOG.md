@@ -17,6 +17,9 @@ For API migration details, see the git commit history and study the changes made
   reorder them.
 - [fixed] A column or row being resized keeps its edge under the pointer, measuring the drag from where it was pressed,
   not from where the drag was noticed.
+- [fixed] A table with filtered rows scrolls to its last row, no further and no less: the height of the filtered rows
+  used the column count and ordering, and filtered rows or columns were mapped through the ordering a second time, and
+  only as many filter indexes as there are rows or columns were counted.
 
 ## 0.4.0 (2026/08/27)
 
