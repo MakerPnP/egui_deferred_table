@@ -29,6 +29,7 @@ serde = { version = "1.0.219", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 rstest = "0.26.1"
+egui_kittest = "0.36.1"
 
 [features]
 persistence = [

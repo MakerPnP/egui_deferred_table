@@ -1,5 +1,5 @@
 use crate::sparse::{CellKind, CellKindChoice, SparseMapRenderer, SparseMapSource, generate_data};
-use egui::{Response, Ui};
+use egui::{Align, Response, Ui};
 use egui_deferred_table::{Action, DeferredTable, apply_reordering};
 use fastrand::Rng;
 use log::debug;
@@ -73,16 +73,26 @@ struct UiState {
     column_ordering_input: String,
 
     row_selections: BTreeSet<usize>,
+
+    scroll_to_row: usize,
+    scroll_to_row_align: Option<Align>,
+    /// Taken when the table is next shown, so it scrolls once.
+    scroll_to_row_request: Option<(usize, Option<Align>)>,
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
     let data_source = &mut state.data;
     let renderer = &mut state.renderer;
 
-    DeferredTable::new(ui.make_persistent_id("table_1"))
+    let mut table = DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
-        .highlight_hovered_cell()
-        .show(ui, data_source, renderer)
+        .highlight_hovered_cell();
+
+    if let Some((row, align)) = state.ui_state.scroll_to_row_request.take() {
+        table = table.scroll_to_row(row, align);
+    }
+
+    table.show(ui, data_source, renderer)
 }
 
 pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
@@ -241,6 +251,43 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.label("Row selections");
             ui.label(format!("{:?}", state.ui_state.row_selections));
+        });
+
+        ui.separator();
+
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.label("Scroll to row");
+            ui.add(egui::DragValue::new(&mut state.ui_state.scroll_to_row));
+
+            let align_name = |align: Option<Align>| match align {
+                None => "Nearest",
+                Some(Align::Min) => "Top",
+                Some(Align::Center) => "Center",
+                Some(Align::Max) => "Bottom",
+            };
+            egui::ComboBox::from_id_salt("scroll_to_row_align")
+                .selected_text(align_name(state.ui_state.scroll_to_row_align))
+                .show_ui(ui, |ui| {
+                    for align in [
+                        None,
+                        Some(Align::Min),
+                        Some(Align::Center),
+                        Some(Align::Max),
+                    ] {
+                        ui.selectable_value(
+                            &mut state.ui_state.scroll_to_row_align,
+                            align,
+                            align_name(align),
+                        );
+                    }
+                });
+
+            if ui.button("Scroll").clicked() {
+                state.ui_state.scroll_to_row_request = Some((
+                    state.ui_state.scroll_to_row,
+                    state.ui_state.scroll_to_row_align,
+                ));
+            }
         });
     });
 

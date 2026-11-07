@@ -1,9 +1,9 @@
 use egui::emath::GuiRounding;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{
-    Color32, Context, CornerRadius, Frame, Id, Margin, NumExt, Painter, PointerButton, PopupAnchor,
-    Pos2, Rangef, Rect, Response, RichText, Sense, Shadow, Stroke, StrokeKind, Style, Tooltip, Ui,
-    UiBuilder, UiKind, UiStackInfo, Vec2,
+    Align, Color32, Context, CornerRadius, Frame, Id, Margin, NumExt, Painter, PointerButton,
+    PopupAnchor, Pos2, Rangef, Rect, Response, RichText, Sense, Shadow, Stroke, StrokeKind, Style,
+    Tooltip, Ui, UiBuilder, UiKind, UiStackInfo, Vec2,
 };
 use log::{info, trace};
 use std::collections::BTreeSet;
@@ -106,6 +106,21 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
     pub fn row_parameters(mut self, row_parameters: &'a Vec<AxisParameters>) -> Self {
         self.parameters.row_parameters = Some(row_parameters);
+        self
+    }
+
+    /// Scrolls the table vertically to show a row, given by its index in the data source, as used by `CellIndex::row`,
+    /// whatever the row ordering.
+    ///
+    /// With no `align`, the table only scrolls if the row isn't wholly shown, and by as little as it can, so the row is
+    /// shown at the top or the bottom.  With an `align`, the row is shown at the top, center or bottom, as far as the
+    /// table can scroll.
+    ///
+    /// Call this only on the frame the table is to scroll, for example the frame after a row was added, as the user
+    /// can't scroll the table away from the row while it's called.  A row that isn't shown, because it's outside the
+    /// data source's rows or filtered out, is ignored.
+    pub fn scroll_to_row(mut self, row: usize, align: Option<Align>) -> Self {
+        self.parameters.scroll_to_row = Some((row, align));
         self
     }
 
@@ -452,9 +467,23 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                 total_content_size.x += additional_width;
 
-                egui::ScrollArea::both()
+                let mut scroll_area = egui::ScrollArea::both()
                     .id_salt("table_scroll_area")
-                    .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
+                    .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible);
+
+                if let Some((row, align)) = self.parameters.scroll_to_row {
+                    let row_offsets = row_offsets(&state.row_heights, dimensions.row_count, row_ordering, rows_to_filter, outer_inner_difference.y + 1.0, row);
+                    // the rows are shown below the column headers. before the first frame, the viewport is estimated.
+                    let viewport_rect = temp_state.last_viewport_rect.unwrap_or(Rect::from_min_size(Pos2::ZERO, table_max_rect.size()));
+                    let rows_viewport = Rangef::new(viewport_rect.min.y, viewport_rect.max.y - outer_cell_size.y);
+                    let offset = row_offsets.and_then(|row_offsets| scroll_offset_to_show(row_offsets, rows_viewport, align));
+                    trace!("scroll_to_row: {}, row_offsets: {:?}, rows_viewport: {:?}, offset: {:?}", row, row_offsets, rows_viewport, offset);
+                    if let Some(offset) = offset {
+                        scroll_area = scroll_area.vertical_scroll_offset(offset);
+                    }
+                }
+
+                scroll_area
                     .show_viewport(ui, |ui, viewport_rect| {
                         let viewport_changed = temp_state.last_viewport_rect.map_or(false, |last_viewport_rect| {
                             last_viewport_rect != viewport_rect
@@ -572,7 +601,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                             }
 
                             let visible_row_index = cell_origin.row + (grid_row_index.saturating_sub(1));
-                            let mapped_row_index = Self::map_index(dimensions.row_count, row_ordering, visible_row_index);
+                            let mapped_row_index = map_index(dimensions.row_count, row_ordering, visible_row_index);
 
                             let row_kind = Self::build_row_kind(grid_row_index);
 
@@ -619,7 +648,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 }
 
                                 let visible_column_index = cell_origin.column + (grid_column_index.saturating_sub(1));
-                                let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
+                                let mapped_column_index = map_index(dimensions.column_count, column_ordering, visible_column_index);
 
                                 if matches!(cell_kind, CellKind::ColumnHeader) {
                                     if let Some(columns_to_filter) = &columns_to_filter {
@@ -1030,7 +1059,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 }
 
                                 let visible_row_index = cell_origin.row + (grid_row_index.saturating_sub(1));
-                                let mapped_row_index = Self::map_index(dimensions.row_count, row_ordering, visible_row_index);
+                                let mapped_row_index = map_index(dimensions.row_count, row_ordering, visible_row_index);
 
                                 if let Some(rows_to_filter) = &rows_to_filter {
                                     if rows_to_filter.contains(&mapped_row_index) {
@@ -1062,7 +1091,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     }
 
                                     let visible_column_index = cell_origin.column + (grid_column_index - 1);
-                                    let mapped_column_index = Self::map_index(dimensions.column_count, column_ordering, visible_column_index);
+                                    let mapped_column_index = map_index(dimensions.column_count, column_ordering, visible_column_index);
 
                                     if let Some(columns_to_filter) = &columns_to_filter {
                                         if columns_to_filter.contains(&mapped_column_index) {
@@ -1340,17 +1369,6 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         }
     }
 
-    fn map_index(count: usize, row_ordering: &[usize], visible_row_index: usize) -> usize {
-        let mut mapped_row_index = *row_ordering
-            .get(visible_row_index)
-            .unwrap_or(&visible_row_index);
-        if mapped_row_index >= count {
-            // handle out-of-range mapping values
-            mapped_row_index = visible_row_index;
-        }
-        mapped_row_index
-    }
-
     /// call this function from a cell action handler
     pub fn handle_editable_cell_click<IS, V>(
         &mut self,
@@ -1440,6 +1458,57 @@ fn filtered_size(sizes: &[f32], count: usize, filter: Option<&[usize]>, sizing: 
         .into_iter()
         .map(|index| sizes.get(index).map(|size| size + sizing).unwrap_or(0.0))
         .sum()
+}
+
+fn map_index(count: usize, ordering: &[usize], visible_index: usize) -> usize {
+    let mut mapped_index = *ordering.get(visible_index).unwrap_or(&visible_index);
+    if mapped_index >= count {
+        // handle out-of-range mapping values
+        mapped_index = visible_index;
+    }
+    mapped_index
+}
+
+/// Where the row whose data index is `row` is, from the top of the first row shown, each row's size being its height
+/// plus `sizing`, or `None` if it's not shown, as it's outside `count` or filtered out.
+fn row_offsets(
+    heights: &[f32],
+    count: usize,
+    ordering: &[usize],
+    filter: Option<&[usize]>,
+    sizing: f32,
+    row: usize,
+) -> Option<Rangef> {
+    let mut top = 0.0;
+    for visible_index in 0..count {
+        let mapped_index = map_index(count, ordering, visible_index);
+        if filter.is_some_and(|filter| filter.contains(&mapped_index)) {
+            continue;
+        }
+        let size = heights.get(mapped_index).copied().unwrap_or(0.0) + sizing;
+        if mapped_index == row {
+            return Some(Rangef::new(top, top + size));
+        }
+        top += size;
+    }
+    None
+}
+
+/// The vertical scroll offset that shows the row at `row`, when the rows at `viewport` are shown, or `None` if it
+/// doesn't need to change.
+///
+/// With no `align`, the table only scrolls if the row isn't wholly shown, by as little as it can.
+fn scroll_offset_to_show(row: Rangef, viewport: Rangef, align: Option<Align>) -> Option<f32> {
+    let span = viewport.span();
+    let offset = match align {
+        None if row.min >= viewport.min && row.max <= viewport.max => return None,
+        None if row.min < viewport.min || row.span() > span => row.min,
+        None => row.max - span,
+        Some(Align::Min) => row.min,
+        Some(Align::Center) => row.center() - (span / 2.0),
+        Some(Align::Max) => row.max - span,
+    };
+    Some(offset.at_least(0.0))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1549,5 +1618,65 @@ mod filtered_size_tests {
 
         // then
         assert_eq!(size, expected);
+    }
+}
+
+#[cfg(test)]
+mod scroll_to_row_tests {
+    use crate::{row_offsets, scroll_offset_to_show};
+    use egui::{Align, Rangef};
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::first_row(0, vec![], None, Some((0.0, 11.0)))]
+    #[case::a_later_row(2, vec![], None, Some((32.0, 63.0)))]
+    // rows 3, 2, 1, 0 are shown in that order, so row 1 comes after 3 and 2.
+    #[case::reordered(1, vec![3, 2, 1, 0], None, Some((72.0, 93.0)))]
+    // the rows filtered out take no space.
+    #[case::after_a_filtered_row(2, vec![], Some(vec![1]), Some((11.0, 42.0)))]
+    #[case::filtered(1, vec![], Some(vec![1]), None)]
+    #[case::outside_the_rows(4, vec![], None, None)]
+    fn test_row_offsets(
+        #[case] row: usize,
+        #[case] ordering: Vec<usize>,
+        #[case] filter: Option<Vec<usize>>,
+        #[case] expected: Option<(f32, f32)>,
+    ) {
+        // given
+        // a 5th height, as the heights aren't truncated when the count drops.
+        let heights = [10.0, 20.0, 30.0, 40.0, 50.0];
+
+        // when
+        let offsets = row_offsets(&heights, 4, &ordering, filter.as_deref(), 1.0, row);
+
+        // then
+        assert_eq!(offsets, expected.map(|(min, max)| Rangef::new(min, max)));
+    }
+
+    #[rstest]
+    #[case::shown(100.0, 120.0, None, None)]
+    #[case::above(10.0, 30.0, None, Some(10.0))]
+    #[case::partly_above(40.0, 60.0, None, Some(40.0))]
+    #[case::below(300.0, 320.0, None, Some(170.0))]
+    #[case::partly_below(190.0, 210.0, None, Some(60.0))]
+    #[case::taller_than_the_viewport(150.0, 400.0, None, Some(150.0))]
+    #[case::shown_at_the_top(100.0, 120.0, Some(Align::Min), Some(100.0))]
+    #[case::shown_in_the_center(100.0, 120.0, Some(Align::Center), Some(35.0))]
+    #[case::shown_at_the_bottom(300.0, 320.0, Some(Align::Max), Some(170.0))]
+    #[case::not_before_the_first_row(10.0, 30.0, Some(Align::Center), Some(0.0))]
+    fn test_scroll_offset_to_show(
+        #[case] row_min: f32,
+        #[case] row_max: f32,
+        #[case] align: Option<Align>,
+        #[case] expected: Option<f32>,
+    ) {
+        // given
+        let viewport = Rangef::new(50.0, 200.0);
+
+        // when
+        let offset = scroll_offset_to_show(Rangef::new(row_min, row_max), viewport, align);
+
+        // then
+        assert_eq!(offset, expected);
     }
 }
