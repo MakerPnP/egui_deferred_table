@@ -18,6 +18,12 @@ For API migration details, see the git commit history and study the changes made
 - [changed] A table fills the space left in its parent, from where it's shown, rather than taking the parent's whole
   size, so a table below other content ends within its parent, and its last rows can be scrolled to.  It's smaller
   than before by the height of the content above it.
+- [added] Clicking a value cell selects its row, with `DeferredTable::select_rows_on_cell_click`, and with Ctrl, or
+  Command on macOS, selects or deselects it, keeping the others.
+- [added] The app can hold the rows selected, with `DeferredTable::row_selection`, so it can change them, for example to
+  select a row it added.  See the 'sparse' demo's "Row selections" controls.
+- [changed] The rows selected that aren't in the data source are removed each frame, not only when the table's
+  dimensions change.
 - [fixed] Columns and rows can be resized again, by dragging the edge of their header, which was taken as a drag to
   reorder them.
 - [fixed] A column or row being resized keeps its edge under the pointer, measuring the drag from where it was pressed,

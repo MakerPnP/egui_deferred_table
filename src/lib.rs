@@ -87,6 +87,32 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         self
     }
 
+    /// The rows selected, by their indexes in the data source, as used by `CellIndex::row`, held by the app rather
+    /// than the table, so the app can change them, for example to select a row it added, or to keep a row it moved
+    /// selected.
+    ///
+    /// The table changes them when the user selects or deselects rows, and returns `Action::RowSelectionChanged`
+    /// when it does, but not when the app changes them.  It removes any row that's not in the data source, as it
+    /// does with the rows it holds, and returns `Action::RowSelectionChanged` then too.
+    ///
+    /// default: the table holds the rows selected, which the app can't change.
+    pub fn row_selection(mut self, selection: &'a mut BTreeSet<usize>) -> Self {
+        self.parameters.row_selection = Some(selection);
+        self
+    }
+
+    /// Clicking a value cell selects its row, and only its row.  With Ctrl, or Command on macOS, it selects or
+    /// deselects the row, keeping the other rows selected, as clicking a row's header does.
+    ///
+    /// A click is a press and release that doesn't move far, so the end of a drag doesn't select a row.  Rows are only
+    /// selected if they're selectable, see `selectable_rows`.
+    ///
+    /// default: disabled, only clicking a row's header selects it.
+    pub fn select_rows_on_cell_click(mut self) -> Self {
+        self.parameters.select_rows_on_cell_click = true;
+        self
+    }
+
     /// default: disabled
     pub fn highlight_hovered_cell(mut self) -> Self {
         self.parameters.highlight_hovered_cell = true;
@@ -277,16 +303,20 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
         if dimensions_changed {
             temp_state.dimensions = Some(dimensions);
+        }
 
-            // remove non-visible selections
-            temp_state.row_selections.retain(|&mapped_row_id| {
-                let visible = mapped_row_id < dimensions.row_count;
+        // the rows selected are the app's, if it holds them, otherwise the table's.  the table's are taken from its
+        // state, and put back when it's stored.
+        let mut table_row_selections = std::mem::take(&mut temp_state.row_selections);
+        let row_selections: &mut BTreeSet<usize> = match self.parameters.row_selection.take() {
+            Some(app_row_selections) => app_row_selections,
+            None => &mut table_row_selections,
+        };
 
-                if !visible {
-                    request_row_selection_changed_action = true;
-                }
-                visible
-            });
+        // remove the selections of rows not in the data source, which the app may have selected, or the data source
+        // may no longer have. the rows are data indexes, so they're below the row count.
+        if !row_selections.split_off(&dimensions.row_count).is_empty() {
+            request_row_selection_changed_action = true;
         }
 
         let parent_max_rect = ui.max_rect();
@@ -620,7 +650,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                             row_counter += 1;
 
                             let row_was_selected = if matches!(row_kind, RowKind::ValuesRow) && self.parameters.selectable_rows {
-                                temp_state.row_selections.contains(&mapped_row_index)
+                                row_selections.contains(&mapped_row_index)
                             } else {
                                 false
                             };
@@ -974,8 +1004,8 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         CellKind::RowHeader => {
                                             if self.parameters.selectable_rows {
                                                 match row_was_selected {
-                                                    true => { temp_state.row_selections.remove(&mapped_row_index); },
-                                                    false => { temp_state.row_selections.insert(mapped_row_index); },
+                                                    true => { row_selections.remove(&mapped_row_index); },
+                                                    false => { row_selections.insert(mapped_row_index); },
                                                 }
                                                 request_row_selection_changed_action = true;
                                             }
@@ -1077,7 +1107,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                 let outer_row_height = inner_row_height + outer_inner_difference.y;
 
                                 let row_was_selected = if self.parameters.selectable_rows {
-                                    temp_state.row_selections.contains(&mapped_row_index)
+                                    row_selections.contains(&mapped_row_index)
                                 } else {
                                     false
                                 };
@@ -1163,6 +1193,14 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
                                         if let (Some(editor), Some(edit_state)) = (editor.as_mut(), edit_state.as_mut()) {
                                             self.handle_editable_cell_click(data_source, cell_index, *editor, *edit_state);
+                                        }
+
+                                        // unlike the action above, the release must end a click, so the end of a drag doesn't select a row.
+                                        let (clicked, command) = ui.ctx().input(|i| (i.pointer.primary_clicked(), i.modifiers.command));
+                                        if clicked && self.parameters.selectable_rows && self.parameters.select_rows_on_cell_click {
+                                            if select_row(row_selections, cell_index.row, command) {
+                                                request_row_selection_changed_action = true;
+                                            }
                                         }
                                     }
 
@@ -1278,21 +1316,24 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
 
         if request_row_selection_changed_action {
             actions.push(Action::RowSelectionChanged {
-                selection: temp_state.row_selections.clone(),
+                selection: row_selections.clone(),
             });
         }
+        temp_state.row_selections = table_row_selections;
 
-        let repaint = match drag_action.take() {
-            None => false,
-            Some(DragAction::SetWidth(index, new_width)) => {
-                state.column_widths[index] = new_width;
-                true
-            }
-            Some(DragAction::SetHeight(index, new_height)) => {
-                state.row_heights[index] = new_height;
-                true
-            }
-        };
+        // the rows were shown before their selection changed, so they're shown again with it.
+        let repaint = request_row_selection_changed_action
+            | match drag_action.take() {
+                None => false,
+                Some(DragAction::SetWidth(index, new_width)) => {
+                    state.column_widths[index] = new_width;
+                    true
+                }
+                Some(DragAction::SetHeight(index, new_height)) => {
+                    state.row_heights[index] = new_height;
+                    true
+                }
+            };
 
         if repaint {
             ui.ctx().request_repaint();
@@ -1462,6 +1503,23 @@ fn filtered_size(sizes: &[f32], count: usize, filter: Option<&[usize]>, sizing: 
         .into_iter()
         .map(|index| sizes.get(index).map(|size| size + sizing).unwrap_or(0.0))
         .sum()
+}
+
+/// Selects the row, and only the row, or with `toggle`, selects or deselects it, keeping the others.  Returns whether
+/// the rows selected changed.
+fn select_row(row_selections: &mut BTreeSet<usize>, row: usize, toggle: bool) -> bool {
+    if toggle {
+        if !row_selections.remove(&row) {
+            row_selections.insert(row);
+        }
+        true
+    } else if row_selections.len() == 1 && row_selections.contains(&row) {
+        false
+    } else {
+        row_selections.clear();
+        row_selections.insert(row);
+        true
+    }
 }
 
 fn map_index(count: usize, ordering: &[usize], visible_index: usize) -> usize {

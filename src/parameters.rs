@@ -1,4 +1,5 @@
 use egui::{Align, NumExt, Rangef, Vec2};
+use std::collections::BTreeSet;
 
 /// Specifies the axis (row/column) parameters.
 ///
@@ -97,6 +98,9 @@ pub(crate) struct DeferredTableParameters<'a> {
     /// Can contain fewer entries than the number of rows. Default axis parameters are used for the remaining rows.
     pub(crate) row_parameters: Option<&'a Vec<AxisParameters>>,
     pub(crate) selectable_rows: bool,
+    /// The rows selected, by their data indexes, when the app holds them, otherwise the table does.
+    pub(crate) row_selection: Option<&'a mut BTreeSet<usize>>,
+    pub(crate) select_rows_on_cell_click: bool,
     /// The data index of a row to scroll to, and how to align it.
     pub(crate) scroll_to_row: Option<(usize, Option<Align>)>,
 }
@@ -112,6 +116,8 @@ impl<'a> Default for DeferredTableParameters<'a> {
             column_parameters: None,
             row_parameters: None,
             selectable_rows: true,
+            row_selection: None,
+            select_rows_on_cell_click: false,
             scroll_to_row: None,
         }
     }

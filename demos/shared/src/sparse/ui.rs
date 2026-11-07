@@ -1,6 +1,6 @@
 use crate::sparse::{CellKind, CellKindChoice, SparseMapRenderer, SparseMapSource, generate_data};
 use egui::{Align, Response, Ui};
-use egui_deferred_table::{Action, DeferredTable, apply_reordering};
+use egui_deferred_table::{Action, DeferredTable, DeferredTableDataSource, apply_reordering};
 use fastrand::Rng;
 use log::debug;
 use names::Generator;
@@ -78,15 +78,23 @@ struct UiState {
     scroll_to_row_align: Option<Align>,
     /// Taken when the table is next shown, so it scrolls once.
     scroll_to_row_request: Option<(usize, Option<Align>)>,
+
+    select_rows_on_cell_click: bool,
 }
 
 pub fn show_table(ui: &mut Ui, state: &mut SparseTableState) -> (Response, Vec<Action>) {
     let data_source = &mut state.data;
     let renderer = &mut state.renderer;
 
+    // the demo holds the rows selected, so its controls can change them.
     let mut table = DeferredTable::new(ui.make_persistent_id("table_1"))
         .zero_based_headers()
-        .highlight_hovered_cell();
+        .highlight_hovered_cell()
+        .row_selection(&mut state.ui_state.row_selections);
+
+    if state.ui_state.select_rows_on_cell_click {
+        table = table.select_rows_on_cell_click();
+    }
 
     if let Some((row, align)) = state.ui_state.scroll_to_row_request.take() {
         table = table.scroll_to_row(row, align);
@@ -134,8 +142,8 @@ pub fn handle_actions(actions: Vec<Action>, state: &mut SparseTableState) {
                 state.ui_state.row_ordering_input =
                     list_to_string(state.renderer.row_ordering.as_mut().unwrap());
             }
-            Action::RowSelectionChanged { selection } => {
-                state.ui_state.row_selections = selection;
+            Action::RowSelectionChanged { selection: _ } => {
+                // the table has changed `state.ui_state.row_selections` already, as the demo holds them.
             }
         }
     }
@@ -251,6 +259,17 @@ pub fn show_controls(ui: &mut Ui, state: &mut SparseTableState) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.label("Row selections");
             ui.label(format!("{:?}", state.ui_state.row_selections));
+            ui.checkbox(
+                &mut state.ui_state.select_rows_on_cell_click,
+                "Select rows on cell click",
+            );
+            if ui.button("Select all").clicked() {
+                let row_count = state.data.get_dimensions().row_count;
+                state.ui_state.row_selections = (0..row_count).collect();
+            }
+            if ui.button("Clear").clicked() {
+                state.ui_state.row_selections.clear();
+            }
         });
 
         ui.separator();
