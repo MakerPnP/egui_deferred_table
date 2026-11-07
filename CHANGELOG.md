@@ -11,6 +11,13 @@ Possible log types:
 
 For API migration details, see the git commit history and study the changes made to the demos.
 
+## Unreleased
+
+- [fixed] Columns and rows can be resized again, by dragging the edge of their header, which was taken as a drag to
+  reorder them.
+- [fixed] A column or row being resized keeps its edge under the pointer, measuring the drag from where it was pressed,
+  not from where the drag was noticed.
+
 ## 0.4.0 (2026/08/27)
 
 - [changed] Update to egui 0.36.0.

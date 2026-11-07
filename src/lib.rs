@@ -242,6 +242,9 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let mut drag_action = None;
 
         let pointer_pos = ui.ctx().pointer_latest_pos();
+        // a drag starts once the pointer has moved far enough from where it was pressed, so it's measured from there, for
+        // the edge being dragged to stay under the pointer.
+        let press_origin = ui.ctx().input(|input| input.pointer.press_origin());
 
         let temp_state_id = self.id.with("temp_state");
         let mut temp_state = DeferredTableTempState::load_or_default(&ctx, temp_state_id);
@@ -765,7 +768,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     // if column_parameters.resizable && !column_parameters.expandable {
                                     if column_parameters.resizable {
                                         if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
-                                            temp_state.drag_state = pointer_pos.map(|start_pos| DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
+                                            temp_state.drag_state = press_origin.or(pointer_pos).map(|start_pos| DragState { index: mapped_column_index, start_pos, cell_kind: cell_kind, initial_size: outer_column_width });
                                         }
 
                                         if resize_response.drag_stopped() {
@@ -815,7 +818,7 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                     };
 
                                     if resize_response.drag_started_by(PointerButton::Primary) && temp_state.drag_state.is_none() {
-                                        temp_state.drag_state = pointer_pos.map(|start_pos|DragState { index: mapped_row_index, start_pos, cell_kind: cell_kind, initial_size: outer_row_height });
+                                        temp_state.drag_state = press_origin.or(pointer_pos).map(|start_pos|DragState { index: mapped_row_index, start_pos, cell_kind: cell_kind, initial_size: outer_row_height });
                                     }
 
                                     if resize_response.drag_stopped() {
@@ -854,14 +857,26 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
                                         });
                                 }
 
-                                let response = ui.allocate_rect(cell_clip_rect, Sense::click_and_drag());
-
                                 let cell_id = match cell_kind {
                                     CellKind::Corner => CellId::Corner,
                                     CellKind::ColumnHeader => CellId::MappedColumn(mapped_column_index),
                                     CellKind::RowHeader => CellId::MappedRow(mapped_row_index),
                                     CellKind::Value => unreachable!(),
                                 };
+
+                                // the header's interactive area leaves out the resize handles at its edges, its own and its
+                                // neighbour's, so dragging a handle resizes, and dragging the rest of the header reorders.
+                                // a header sensing drags over a handle is also hit by the drag, and, being registered
+                                // after it, would win egui's hit test, so a column or row could never be resized.
+                                let resize_grab_radius_side = ui.style().interaction.resize_grab_radius_side;
+                                let header_interact_rect = match cell_kind {
+                                    CellKind::ColumnHeader => cell_clip_rect.shrink2(Vec2::new(resize_grab_radius_side, 0.0)),
+                                    CellKind::RowHeader => cell_clip_rect.shrink2(Vec2::new(0.0, resize_grab_radius_side)),
+                                    _ => cell_clip_rect,
+                                };
+
+                                ui.allocate_rect(cell_clip_rect, Sense::hover());
+                                let response = ui.interact(header_interact_rect, ui.id().with("header").with(cell_id), Sense::click_and_drag());
 
                                 if matches!(cell_kind, CellKind::ColumnHeader | CellKind::RowHeader) {
                                     response.dnd_set_drag_payload(cell_id);
