@@ -1,5 +1,8 @@
 //! A table of numbered rows, shown in a harness with no window, for tests of the table's behaviour.
 
+// each test uses only some of these.
+#![allow(dead_code)]
+
 use egui::{Align, Id, Ui};
 use egui_deferred_table::{
     Action, CellIndex, DeferredTable, DeferredTableDataSource, DeferredTableRenderer,
@@ -9,6 +12,8 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
 pub const ROW_COUNT: usize = 100;
+pub const WINDOW_WIDTH: f32 = 400.0;
+pub const WINDOW_HEIGHT: f32 = 300.0;
 
 pub struct Rows {
     pub row_count: usize,
@@ -49,6 +54,8 @@ pub struct TableState {
     /// Taken on the next frame, so the table scrolls once.
     pub scroll_to_row: Option<(usize, Option<Align>)>,
     pub actions: Vec<Action>,
+    /// How many lines of text are shown above the table.
+    pub lines_above: usize,
 }
 
 impl Default for TableState {
@@ -60,22 +67,28 @@ impl Default for TableState {
             renderer: RowsRenderer::default(),
             scroll_to_row: None,
             actions: vec![],
+            lines_above: 0,
         }
     }
 }
 
 pub fn table_harness(state: TableState) -> Harness<'static, TableState> {
-    let mut harness = Harness::builder().with_size((400.0, 300.0)).build_ui_state(
-        |ui, state: &mut TableState| {
-            let mut table = DeferredTable::new(Id::new("table"));
-            if let Some((row, align)) = state.scroll_to_row.take() {
-                table = table.scroll_to_row(row, align);
-            }
-            let (_response, actions) = table.show(ui, &mut state.rows, &mut state.renderer);
-            state.actions.extend(actions);
-        },
-        state,
-    );
+    let mut harness = Harness::builder()
+        .with_size((WINDOW_WIDTH, WINDOW_HEIGHT))
+        .build_ui_state(
+            |ui, state: &mut TableState| {
+                for line in 0..state.lines_above {
+                    ui.label(format!("above the table {}", line));
+                }
+                let mut table = DeferredTable::new(Id::new("table"));
+                if let Some((row, align)) = state.scroll_to_row.take() {
+                    table = table.scroll_to_row(row, align);
+                }
+                let (_response, actions) = table.show(ui, &mut state.rows, &mut state.renderer);
+                state.actions.extend(actions);
+            },
+            state,
+        );
     harness.run();
     harness
 }

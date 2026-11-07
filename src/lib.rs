@@ -307,11 +307,15 @@ impl<'a, DataSource> DeferredTable<'a, DataSource> {
         let outer_min_rect =
             Rect::from_min_size(outer_next_widget_position, self.parameters.min_size.clone())
                 .round_to_pixels(pixels_per_point);
-        // FIXME if the parent_max_rect is too small, min_size is not respected, but using
-        //       ... `parent_max_rect.size().at_least(self.parameters.min_size)` causes rendering errors
-        let outer_max_rect =
-            Rect::from_min_size(outer_next_widget_position, parent_max_rect.size())
-                .round_to_pixels(pixels_per_point);
+        // the table fills the space left in the parent, from the next widget's position, so it ends within the parent
+        // when there's content above it, rather than overlapping what's below.
+        // FIXME if the space left is too small, min_size is not respected, but using
+        //       ... `at_least(self.parameters.min_size)` would make a table overflow a parent smaller than min_size.
+        let outer_max_rect = Rect::from_min_max(
+            outer_next_widget_position,
+            parent_max_rect.max.max(outer_next_widget_position),
+        )
+        .round_to_pixels(pixels_per_point);
 
         trace!(
             "outer_min_rect: {:?}, outer_max_rect: {:?}",

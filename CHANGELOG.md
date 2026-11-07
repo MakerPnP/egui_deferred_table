@@ -15,6 +15,9 @@ For API migration details, see the git commit history and study the changes made
 
 - [added] Scroll a row into view, with `DeferredTable::scroll_to_row`, given by its data index, at the nearest edge or
   aligned to the top, center or bottom.  See the 'sparse' demo's "Scroll to row" control.
+- [changed] A table fills the space left in its parent, from where it's shown, rather than taking the parent's whole
+  size, so a table below other content ends within its parent, and its last rows can be scrolled to.  It's smaller
+  than before by the height of the content above it.
 - [fixed] Columns and rows can be resized again, by dragging the edge of their header, which was taken as a drag to
   reorder them.
 - [fixed] A column or row being resized keeps its edge under the pointer, measuring the drag from where it was pressed,
